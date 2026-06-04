@@ -1,3 +1,4 @@
+const tableRoutes = require('./routes/tableRoutes');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -18,6 +19,7 @@ app.use(express.json()); // Permet à Express de lire le JSON envoyé par le fro
 // Déclaration de TES routes d'administration
 app.use('/api/users', userRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/tables', tableRoutes);
 
 // Route de test d'API de base
 app.get('/', (req, res) => {

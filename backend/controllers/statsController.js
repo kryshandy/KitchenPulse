@@ -38,6 +38,28 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+/**
+ * 🧑‍🍳 SERVEUR : Récupérer la liste des commandes actives (en préparation ou prêtes)
+ * Utilise la vue SQL v_commandes_actives
+ */
+const getActiveOrders = async (req, res) => {
+  try {
+    const [activeOrders] = await db.query('SELECT * FROM v_commandes_actives');
+    return res.status(200).json({
+      success: true,
+      count: activeOrders.length,
+      data: activeOrders
+    });
+  } catch (error) {
+    console.error('❌ Erreur dans getActiveOrders :', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur lors du chargement des commandes actives.'
+    });
+  }
+};
+
 module.exports = {
-  getDashboardStats
+  getDashboardStats,
+  getActiveOrders // <-- Ne l'oublie pas !
 };
