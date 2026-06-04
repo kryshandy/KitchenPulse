@@ -5,16 +5,19 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Récupérer l'utilisateur connecté au chargement de l'app
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
+    const savedToken = localStorage.getItem('token');
+    if (savedToken) {
+      setToken(savedToken);
       API.get('/auth/me')
         .then((res) => setUser(res.data))
         .catch(() => {
           localStorage.removeItem('token');
+          setToken(null);
           setUser(null);
         })
         .finally(() => setLoading(false));
@@ -23,18 +26,20 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = (token, userData) => {
-    localStorage.setItem('token', token);
+  const login = (tokenValue, userData) => {
+    localStorage.setItem('token', tokenValue);
+    setToken(tokenValue);
     setUser(userData);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    setToken(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
