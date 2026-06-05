@@ -1,11 +1,13 @@
 const jwt = require('jsonwebtoken');
 
-module.exports = (req, res, next) => {
-  const header = req.headers['authorization'];
-  if (!header) return res.status(401).json({ message: 'Token manquant' });
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
 
-  const token = header.split(' ')[1];
-  if (!token) return res.status(401).json({ message: 'Format invalide (Bearer <token>)' });
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Token manquant ou format invalide (Bearer <token>)' });
+  }
+
+  const token = authHeader.split(' ')[1];
 
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET || 'kitchenpulse_secret');
@@ -14,3 +16,5 @@ module.exports = (req, res, next) => {
     return res.status(401).json({ message: 'Token invalide ou expiré' });
   }
 };
+
+module.exports = verifyToken;

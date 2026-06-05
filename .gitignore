@@ -1,3 +1,28 @@
+<<<<<<< HEAD
 # Ignorer les dépendances du frontend
 frontend/node_modules/
 backend/node_modules/
+=======
+<<<<<<< HEAD
+node_modules/
+=======
+# Env
+.env
+backend/.env
+
+# Dépendances
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build
+frontend/dist/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+>>>>>>> origin/feature/cuisinier
+>>>>>>> feature/tests

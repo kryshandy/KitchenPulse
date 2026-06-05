@@ -1,19 +1,25 @@
-const router  = require('express').Router();
-const ctrl    = require('../controllers/authController');
-const verify  = require('../middleware/verifyToken');
+const express  = require('express');
+const router   = express.Router();
+const { register, login, getMe } = require('../controllers/authController');
+const verifyToken = require('../middleware/verifyToken');
 
-router.post('/register', ctrl.register);
-router.post('/login',    ctrl.login);
-router.get('/me',        verify, ctrl.me);
+// ── Auth publique ──────────────────────────────────────────────
+router.post('/register', register);
+router.post('/login',    login);
 
-// GET /auth/allergies — liste publique pour le formulaire d'inscription
-router.get('/allergies', async (req, res) => {
+// ── Profil connecté ────────────────────────────────────────────
+router.get('/me', verifyToken, getMe);
+
+// ── GET /api/auth/allergies — liste publique (formulaire inscription) ──
+router.get('/allergies', async (_req, res) => {
   const pool = require('../config/db');
   try {
-    const [rows] = await pool.query('SELECT id, code, label, icon FROM allergies ORDER BY id');
+    const [rows] = await pool.query(
+      'SELECT id, code, label, icon FROM allergies ORDER BY id'
+    );
     res.json(rows);
   } catch {
-    res.status(500).json({ message: 'Erreur' });
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 });
 

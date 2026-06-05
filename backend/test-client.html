@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Sockets KitchenPulse</title>
+    <script src="http://localhost:5000/socket.io/socket.io.js"></script>
+</head>
+<body>
+    <h1>Testeur de Sockets KitchenPulse 🍽️</h1>
+    
+    <button onclick="rejoindre('cuisine')">Rejoindre comme CUISINE</button>
+    <button onclick="rejoindre('serveurs')">Rejoindre comme SERVEUR</button>
+    <p id="statut">Statut : Non connecté</p>
+
+    <h3>Simuler des actions :</h3>
+    <button onclick="envoyerCommande()">🛒 Client : Passer une commande</button>
+    <button onclick="validerPlat()">👨‍🍳 Cuisine : Plat prêt !</button>
+
+    <h3>Logs en temps réel :</h3>
+    <div id="logs" style="background: #eed; padding: 10px; border: 1px solid #ccc; height: 200px; overflow-y: scroll;"></div>
+
+    <script>
+        const socket = io('http://localhost:5000');
+        const logsDiv = document.getElementById('logs');
+
+        socket.on('connect', () => {
+            document.getElementById('statut').innerText = "Statut : Connecté avec l'ID " + socket.id;
+        });
+
+        function rejoindre(role) {
+            socket.emit('rejoindre_role', role);
+            logsDiv.innerHTML += `<p style="color: blue;">-> Tu as demandé à rejoindre le rôle : ${role}</p>`;
+        }
+
+        function envoyerCommande() {
+            socket.emit('nouvelle_commande', { id: 101, plat: "Ndolè au poisson", table: 4 });
+        }
+
+        function validerPlat() {
+            socket.emit('plat_pret', { id: 101, plat: "Ndolè au poisson", table: 4 });
+        }
+
+        // Écoute des retours du serveur
+        socket.on('notification_cuisine', (data) => {
+            logsDiv.innerHTML += `<p style="color: green;">📢 [Écran Cuisine] Reçu : ${data.message} (${data.commande.plat} pour Table ${data.commande.table})</p>`;
+        });
+
+        socket.on('notification_serveur', (data) => {
+            logsDiv.innerHTML += `<p style="color: orange;">📢 [Écran Serveur] Reçu : ${data.message} (Servir Table ${data.plat.table})</p>`;
+        });
+    </script>
+</body>
+</html>
