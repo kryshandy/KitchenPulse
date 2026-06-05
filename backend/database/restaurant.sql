@@ -20,11 +20,19 @@
 -- ============================================================
 -- 0. CRÉATION / SÉLECTION DE LA BASE
 -- ============================================================
+<<<<<<< HEAD
 CREATE DATABASE IF NOT EXISTS `kitchenpulse_db`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
 USE `kitchenpulse_db`;
+=======
+CREATE DATABASE IF NOT EXISTS `restaurant.sql`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE `restaurant.sql`;
+>>>>>>> origin/feature/cuisinier
 
 -- ============================================================
 -- 1. NETTOYAGE (ordre inverse des dépendances FK)
@@ -1182,4 +1190,8 @@ GROUP BY p.`id`, p.`name`;
 -- Compatible phpMyAdmin, HeidiSQL, MySQL Workbench,
 -- ligne de commande mysql, DBeaver
 -- Groupe 7 — KEYCE Informatique Yaoundé
+<<<<<<< HEAD
 -- ============================================================
+=======
+-- ============================================================
+>>>>>>> origin/feature/cuisinier

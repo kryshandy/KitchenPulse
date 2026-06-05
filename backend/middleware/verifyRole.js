@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Middleware temporaire pour simuler la vérification des rôles
 const verifyRole = (roleAutorise) => {
   return (req, res, next) => {
@@ -9,6 +10,19 @@ const verifyRole = (roleAutorise) => {
     } else {
       res.status(403).json({ success: false, message: "Accès refusé : rôle insuffisant." });
     }
+=======
+const verifyRole = (...rolesAutorises) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Non authentifié.' });
+    }
+
+    if (!rolesAutorises.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Accès refusé : rôle insuffisant.' });
+    }
+
+    next();
+>>>>>>> origin/feature/cuisinier
   };
 };
 
