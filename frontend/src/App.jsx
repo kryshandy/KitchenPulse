@@ -1,99 +1,83 @@
-import React, { useState } from 'react';
-import Sidebar from './components/Sidebar';
-import Dashboard from './pages/Dashboard';
-import GestionUsers from './pages/GestionUsers';
-import GestionMenu from './pages/GestionMenu'; // Import bien présent
-import GestionOrders from './pages/GestionOrders';
-
-function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard': 
-        return <Dashboard />;
-      case 'users': 
-        return <GestionUsers />;
-      case 'menu': // LE VOICI ! L'aiguillage pour la gestion du menu
-        return <GestionMenu />;
-      default: 
-        return <Dashboard />;
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', backgroundColor: '#fdf8f5', minHeight: '100vh', overflowX: 'hidden' }}>
-      <button 
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-        style={{
-          position: 'fixed', top: '25px', zIndex: 200, width: '45px', height: '45px',
-          borderRadius: '14px', border: '1px solid #fed7aa', backgroundColor: '#ffffff',
-          color: '#f97316', fontSize: '16px', cursor: 'pointer', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(249, 115, 22, 0.15)',
-          transition: 'all 0.3s ease', left: isSidebarOpen ? '285px' : '20px'
-        }}
-      >
-        {isSidebarOpen ? '◀' : '▶'}
-      </button>
-
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={isSidebarOpen} />
-      
-      <main style={{
-        flexGrow: 1, minHeight: '100vh', paddingRight: '40px', paddingTop: '40px', paddingBottom: '40px',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        marginLeft: isSidebarOpen ? '260px' : '0px',
-        paddingLeft: isSidebarOpen ? '50px' : '90px'
-      }}>
-        {renderContent()}
-      </main>
-    </div>
-  );
-}
-
-export default App;
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-import Login from './pages/Auth/Login';
-import Register from './pages/Auth/Register';
+import Login              from './pages/Auth/Login';
+import Register           from './pages/Auth/Register';
 import CuisinierDashboard from './pages/Cuisinier/CuisinierDashboard';
+import AdminDashboard     from './pages/Admin/Dashboard';
+import GestionUsers       from './pages/Admin/GestionUsers';
+import ServeurDashboard   from './pages/Serveur/ServeurDashboard';
 
-// Guard de route par rôle
+// ── Guard de route par rôle ───────────────────────────────────
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, token, loading } = useAuth();
-  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Chargement...</div>;
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0f172a' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontSize:40, marginBottom:12 }}>🍽️</div>
+        <p style={{ color:'#f97316', fontWeight:600 }}>Chargement KitchenPulse...</p>
+      </div>
+    </div>
+  );
   if (!token) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user?.role)) {
-    return <Navigate to="/login" replace />;
+  if (allowedRoles) {
+    const role = user?.role?.toLowerCase();
+    const allowed = allowedRoles.map(r => r.toLowerCase());
+    if (!allowed.includes(role)) return <Navigate to="/login" replace />;
   }
   return children;
+};
+
+// ── Redirection intelligente après login ──────────────────────
+const RoleRedirect = () => {
+  const { user } = useAuth();
+  const role = user?.role?.toLowerCase();
+  if (role === 'admin')     return <Navigate to="/admin" replace />;
+  if (role === 'cuisinier') return <Navigate to="/cuisinier" replace />;
+  if (role === 'serveur')   return <Navigate to="/serveur" replace />;
+  return <Navigate to="/login" replace />;
 };
 
 function App() {
   return (
     <BrowserRouter>
-      <ToastContainer position="top-right" autoClose={3000} />
+      <ToastContainer position="top-right" autoClose={3000} theme="dark" />
       <AuthProvider>
         <Routes>
           {/* Auth */}
-          <Route path="/login" element={<Login />} />
+          <Route path="/login"    element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          {/* Cuisinier Dashboard (remplace les deux anciennes routes) */}
-          <Route
-            path="/cuisinier/*"
-            element={
-              <ProtectedRoute allowedRoles={['cuisinier', 'admin']}>
-                <CuisinierDashboard />
-              </ProtectedRoute>
-            }
-          />
+          {/* Admin */}
+          <Route path="/admin" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/users" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <GestionUsers />
+            </ProtectedRoute>
+          } />
+
+          {/* Cuisinier */}
+          <Route path="/cuisinier/*" element={
+            <ProtectedRoute allowedRoles={['cuisinier', 'admin']}>
+              <CuisinierDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Serveur */}
+          <Route path="/serveur/*" element={
+            <ProtectedRoute allowedRoles={['serveur', 'admin']}>
+              <ServeurDashboard />
+            </ProtectedRoute>
+          } />
 
           {/* Redirections */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<RoleRedirect />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>
