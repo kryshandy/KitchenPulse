@@ -10,6 +10,7 @@ const orderRoutes  = require('./routes/orderRoutes');
 const tableRoutes  = require('./routes/tableRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const userRoutes   = require('./routes/userRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 const { initSocket } = require('./socket/socketHandlers');
 
 const app    = express();
@@ -34,6 +35,7 @@ app.use('/api/orders',  orderRoutes);
 app.use('/api/tables',  tableRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/users',   userRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date() }));
@@ -54,4 +56,5 @@ server.listen(PORT, () => {
   console.log(`    GET  /api/dishes`);
   console.log(`    GET  /api/dishes/categories`);
   console.log(`    GET  /api/tables\n`);
+  console.log(`    GET  /api/payments\n`);
 });
