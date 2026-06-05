@@ -1,28 +1,28 @@
 import axios from 'axios';
 
-// Changer l'URL quand feat/setup-auth est mergé
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
-  headers: { 'Content-Type': 'application/json' },
+  // Avec le proxy Vite, on met juste '/' — pas besoin de localhost:3001
+  baseURL: '/',
+  timeout: 10000,
 });
 
-// Intercepteur : ajoute automatiquement le JWT à chaque requête
+// Injecte le JWT automatiquement dans chaque requête
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('kp_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Intercepteur : redirige vers /login si token expiré (401)
+// Si 401 → token expiré → retour login
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('kp_token');
+      localStorage.removeItem('kp_user');
+      window.location.href = '/';
     }
-    return Promise.reject(error);
+    return Promise.reject(err);
   }
 );
 
