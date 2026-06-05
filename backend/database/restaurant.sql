@@ -20,7 +20,7 @@
 -- ============================================================
 -- 0. CRÉATION / SÉLECTION DE LA BASE
 -- ============================================================
-<<<<<<< HEAD
+--<<<<<<< HEAD
 CREATE DATABASE IF NOT EXISTS `kitchenpulse_db`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
@@ -32,7 +32,7 @@ CREATE DATABASE IF NOT EXISTS `restaurant.sql`
   COLLATE utf8mb4_unicode_ci;
 
 USE `restaurant.sql`;
->>>>>>> origin/feature/cuisinier
+-->>>>>>> origin/feature/cuisinier
 
 -- ============================================================
 -- 1. NETTOYAGE (ordre inverse des dépendances FK)
