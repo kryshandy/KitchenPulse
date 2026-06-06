@@ -1,7 +1,7 @@
 ================================================================================
 KITCHENPULSE - RESTAURANT MANAGEMENT SYSTEM
 Documentation Officielle v4.0
-KEYCE Informatique Yaoundé - Groupe 7
+KEYCE Informatique Yaoundé - Groupe 8
 ================================================================================
 
 TABLE DES MATIERES
@@ -20,7 +20,7 @@ TABLE DES MATIERES
 1. PRESENTATION DU PROJET
 =========================
 KitchenPulse est une solution de gestion de restaurant en temps réel développée
-par KEYCE Informatique - Groupe 7 (Yaoundé). L'application permet aux restaurants
+par KEYCE Informatique - Groupe 8 (Yaoundé). L'application permet aux restaurants
 de digitaliser leurs opérations, de la prise de commande à la gestion de cuisine,
 en passant par le service en salle.
 
@@ -169,6 +169,7 @@ PATCH  /api/orders/:id/cancel     - Annuler (client/serveur/admin)
 GET    /api/tables                - Liste tables
 PATCH  /api/tables/:id/status     - Changer statut table (serveur/admin)
 GET    /api/users                 - Liste utilisateurs (admin)
+GET    /api/payments              - Gérer le paiements (client)
 
 Exemple d'appel authentifié :
 curl http://localhost:3001/api/auth/me \

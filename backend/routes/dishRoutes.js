@@ -3,30 +3,29 @@ const router      = express.Router();
 const ctrl        = require('../controllers/dishController');
 const verifyToken = require('../middleware/verifyToken');
 const verifyRole  = require('../middleware/verifyRole');
+const upload      = require('../middleware/upload');
 
-// ── Lecture publique ───────────────────────────────────────────
-// ⚠️ /categories DOIT être avant /:id pour ne pas être capturé comme un id
-router.get('/categories', ctrl.getCategories);   // ✅ exporté dans dishController
-router.get('/',           ctrl.getAllDishes);     // ✅ était ctrl.getAll    → CORRIGÉ
-router.get('/:id',        ctrl.getDishById);     // ✅ était ctrl.getOne    → CORRIGÉ
+// Lecture publique — /categories AVANT /:id
+router.get('/categories', ctrl.getCategories);
+router.get('/',           ctrl.getAllDishes);
+router.get('/:id',        ctrl.getDishById);
 
-// ── Écriture protégée ──────────────────────────────────────────
+// Écriture protégée avec upload image optionnel
 router.post('/',
-  verifyToken,
-  verifyRole('cuisinier', 'admin'),
-  ctrl.createDish                                // ✅ était ctrl.create   → CORRIGÉ
+  verifyToken, verifyRole('cuisinier', 'admin'),
+  upload.single('image'),
+  ctrl.createDish
 );
 
 router.patch('/:id',
-  verifyToken,
-  verifyRole('cuisinier', 'admin'),
-  ctrl.updateDish                                // ✅ était ctrl.update   → CORRIGÉ
+  verifyToken, verifyRole('cuisinier', 'admin'),
+  upload.single('image'),
+  ctrl.updateDish
 );
 
 router.delete('/:id',
-  verifyToken,
-  verifyRole('admin'),
-  ctrl.deleteDish                                // ✅ était ctrl.remove   → CORRIGÉ
+  verifyToken, verifyRole('admin'),
+  ctrl.deleteDish
 );
 
 module.exports = router;

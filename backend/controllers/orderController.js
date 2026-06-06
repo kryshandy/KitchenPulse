@@ -1,281 +1,174 @@
+// backend/controllers/orderController.js
+// ⚠️  AJOUTE ces deux fonctions à ton orderController existant si elles manquent.
+// Si ton fichier est complet, vérifie juste que getOrders et updateOrderStatus existent.
+
 const pool = require('../config/db');
 
-// ── Helper : numéro de commande unique ─────────────────────────
-const genOrderNumber = () => {
-  const d   = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  return `KP-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${Math.floor(Math.random() * 9000 + 1000)}`;
-};
-
-// ── Helper : charger les items d'une commande ──────────────────
-const loadItems = async (orderId) => {
-  const [items] = await pool.query(
-    `SELECT oi.*, p.name, p.image_url, p.prep_time_minutes
-     FROM order_items oi JOIN plats p ON oi.plat_id = p.id
-     WHERE oi.commande_id = ?`,
-    [orderId]
-  );
-  return items;
-};
-
-// ── POST /api/orders — créer une commande (client) ─────────────
-const create = async (req, res) => {
-  const { items, table_id, notes } = req.body;
-  // items = [{ plat_id, quantity, special_instructions }]
-
-  if (!items || !items.length) {
-    return res.status(400).json({ message: 'Panier vide' });
-  }
-
-  const conn = await pool.getConnection();
+// ── GET /api/orders?status=RECUE,EN_PREPARATION ────────────────
+// Utilisé par le cuisinier et le client
+exports.getOrders = async (req, res) => {
   try {
-    await conn.beginTransaction();
+    const { status } = req.query;
+    const user = req.user;
 
-    // Vérifier les plats et calculer les totaux
-    let subtotal = 0;
-    const enriched = [];
-    for (const item of items) {
-      const [rows] = await conn.query(
-        'SELECT id, name, price, is_active FROM plats WHERE id = ?',
-        [item.plat_id]
+    let sql = `
+      SELECT c.*,
+             t.table_number AS table_numero,
+             u.first_name, u.last_name
+      FROM commandes c
+      LEFT JOIN tables_restaurant t ON c.table_id = t.id
+      LEFT JOIN users u ON c.client_id = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    // Filtre par statut (liste séparée par virgules)
+    if (status) {
+      const statuses = status.split(',').map(s => s.trim());
+      sql += ` AND c.status IN (${statuses.map(() => '?').join(',')})`;
+      params.push(...statuses);
+    }
+
+    // Client ne voit que ses propres commandes
+    if (user.role === 'CLIENT') {
+      sql += ' AND c.client_id = ?';
+      params.push(user.id);
+    }
+
+    sql += ' ORDER BY c.opened_at DESC';
+
+    const [orders] = await pool.query(sql, params);
+
+    // Charger les items de chaque commande
+    if (orders.length) {
+      const ids = orders.map(o => o.id);
+      const [items] = await pool.query(
+        `SELECT oi.*, p.name AS plat_nom, p.prep_time_minutes
+         FROM order_items oi
+         JOIN plats p ON oi.plat_id = p.id
+         WHERE oi.commande_id IN (?)`,
+        [ids]
       );
-      if (!rows.length || !rows[0].is_active) {
-        await conn.rollback();
-        return res.status(400).json({ message: `Plat #${item.plat_id} indisponible` });
-      }
-      const qty = item.quantity || 1;
-      enriched.push({ ...rows[0], quantity: qty, instructions: item.special_instructions || '' });
-      subtotal += rows[0].price * qty;
+      const map = {};
+      items.forEach(i => {
+        if (!map[i.commande_id]) map[i.commande_id] = [];
+        map[i.commande_id].push(i);
+      });
+      orders.forEach(o => { o.items = map[o.id] || []; });
     }
 
-    const tax_amount   = subtotal * 0.1925; // TVA Cameroun
-    const total_amount = subtotal + tax_amount;
-
-    // Table par défaut si non fournie
-    let tableId = table_id;
-    if (!tableId) {
-      const [tables] = await conn.query(
-        "SELECT id FROM tables_restaurant WHERE status = 'libre' AND is_active = 1 LIMIT 1"
-      );
-      tableId = tables[0]?.id || 1;
-    }
-
-    const orderNumber = genOrderNumber();
-
-    // Créer la commande
-    const [orderResult] = await conn.query(
-      `INSERT INTO commandes
-         (table_id, user_id, status, payment_status, order_number, subtotal, tax_amount, total_amount, notes, opened_at)
-       VALUES (?, ?, 'nouveau', 'en_attente', ?, ?, ?, ?, ?, NOW())`,
-      [tableId, req.user.id, orderNumber, subtotal, tax_amount, total_amount, notes || null]
-    );
-    const orderId = orderResult.insertId;
-
-    // Insérer les items
-    for (const item of enriched) {
-      await conn.query(
-        `INSERT INTO order_items
-           (commande_id, plat_id, quantity, unit_price, subtotal, special_instructions, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'en_attente')`,
-        [orderId, item.id, item.quantity, item.price, item.price * item.quantity, item.instructions]
-      );
-    }
-
-    await conn.commit();
-
-    // Notifier la cuisine via Socket.io
-    if (req.io) {
-      req.io.to('cuisine').emit('new_order', { orderId, order_number: orderNumber, items: enriched });
-    }
-
-    return res.status(201).json({
-      id: orderId,
-      order_number: orderNumber,
-      subtotal, tax_amount, total_amount,
-      message: 'Commande envoyée en cuisine !',
-    });
+    return res.json(orders);
   } catch (err) {
-    await conn.rollback();
-    console.error('create order error:', err);
-    return res.status(500).json({ message: 'Erreur lors de la création de la commande' });
-  } finally {
-    conn.release();
+    console.error('getOrders:', err);
+    return res.status(500).json({ message: 'Erreur serveur', detail: err.message });
   }
 };
 
-// ── GET /api/orders/:id — suivi commande (client) ──────────────
-const getOne = async (req, res) => {
+// ── PATCH /api/orders/:id/status ──────────────────────────────
+// Cycle : RECUE → EN_PREPARATION → PRETE → SERVIE → CLOTUREE
+exports.updateOrderStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const ALLOWED = ['EN_PREPARATION', 'PRETE', 'EN_COURS_DE_SERVICE', 'SERVIE', 'CLOTUREE', 'ANNULEE'];
+  if (!ALLOWED.includes(status)) {
+    return res.status(400).json({ message: `Statut invalide. Valeurs : ${ALLOWED.join(', ')}` });
+  }
+
   try {
-    const [orders] = await pool.query(
-      `SELECT c.id, c.order_number, c.status, c.payment_status,
-              c.subtotal, c.tax_amount, c.total_amount,
-              c.notes, c.opened_at, c.updated_at,
-              t.table_number, t.label AS table_label
+    const [rows] = await pool.execute('SELECT id, status FROM commandes WHERE id = ?', [id]);
+    if (!rows.length) return res.status(404).json({ message: 'Commande introuvable' });
+
+    await pool.execute('UPDATE commandes SET status = ?, updated_at = NOW() WHERE id = ?', [status, id]);
+
+    // Émettre l'événement Socket.io si disponible
+    if (req.io) {
+      req.io.to('cuisine').emit('order_status_update', { orderId: id, status });
+      req.io.to('salle').emit('order_status_update', { orderId: id, status });
+      req.io.to(`order:${id}`).emit('order_status_update', { orderId: id, status });
+      if (status === 'PRETE') {
+        req.io.to('salle').emit('order_ready', { orderId: id });
+      }
+    }
+
+    return res.json({ message: `Commande passée à ${status}`, orderId: id, status });
+  } catch (err) {
+    console.error('updateOrderStatus:', err);
+    return res.status(500).json({ message: 'Erreur serveur', detail: err.message });
+  }
+};
+
+// ── GET /api/orders/:id ───────────────────────────────────────
+exports.getOrderById = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT c.*, t.table_number AS table_numero, u.first_name, u.last_name
        FROM commandes c
        LEFT JOIN tables_restaurant t ON c.table_id = t.id
-       WHERE c.id = ? AND c.user_id = ?`,
-      [req.params.id, req.user.id]
+       LEFT JOIN users u ON c.client_id = u.id
+       WHERE c.id = ?`,
+      [req.params.id]
     );
-    if (!orders.length) return res.status(404).json({ message: 'Commande introuvable' });
+    if (!rows.length) return res.status(404).json({ message: 'Commande introuvable' });
+    const order = rows[0];
 
-    const order = orders[0];
-    order.items = await loadItems(order.id);
-
-    const [history] = await pool.query(
-      `SELECT previous_status, new_status, changed_at
-       FROM order_status_history WHERE commande_id = ? ORDER BY changed_at`,
+    const [items] = await pool.query(
+      `SELECT oi.*, p.name AS plat_nom, p.prep_time_minutes
+       FROM order_items oi JOIN plats p ON oi.plat_id = p.id
+       WHERE oi.commande_id = ?`,
       [order.id]
     );
-    order.status_history = history;
-
+    order.items = items;
     return res.json(order);
   } catch (err) {
-    console.error('getOne order error:', err);
+    console.error('getOrderById:', err);
     return res.status(500).json({ message: 'Erreur serveur' });
   }
 };
 
-// ── GET /api/orders/mine — mes commandes (client) ──────────────
-const getMine = async (req, res) => {
+// ── POST /api/orders ──────────────────────────────────────────
+exports.createOrder = async (req, res) => {
+  const { table_id, notes, items } = req.body;
+  if (!table_id || !items?.length) {
+    return res.status(400).json({ message: 'table_id et items sont requis' });
+  }
   try {
-    const [orders] = await pool.query(
-      `SELECT c.id, c.order_number, c.status, c.payment_status,
-              c.total_amount, c.opened_at, c.updated_at, t.table_number
-       FROM commandes c
-       LEFT JOIN tables_restaurant t ON c.table_id = t.id
-       WHERE c.user_id = ? ORDER BY c.opened_at DESC LIMIT 20`,
-      [req.user.id]
+    const total = items.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
+    const [result] = await pool.execute(
+      `INSERT INTO commandes (client_id, table_id, notes, total_amount, status, payment_status, opened_at)
+       VALUES (?, ?, ?, ?, 'RECUE', 'EN_ATTENTE', NOW())`,
+      [req.user.id, table_id, notes || null, total]
     );
-    return res.json(orders);
-  } catch (err) {
-    console.error('getMine error:', err);
-    return res.status(500).json({ message: 'Erreur serveur' });
-  }
-};
+    const commandeId = result.insertId;
 
-// ── GET /api/orders — toutes commandes avec filtres (admin/serveur) ─
-const getAllOrders = async (req, res) => {
-  const { statut, client_id, serveur_id } = req.query;
-  let query = `
-    SELECT c.*, u.first_name, u.last_name, t.table_number
-    FROM commandes c
-    JOIN  users u ON c.user_id = u.id
-    LEFT JOIN tables_restaurant t ON c.table_id = t.id
-    WHERE 1=1
-  `;
-  const params = [];
-  if (statut)     { query += ' AND c.status = ?';    params.push(statut); }
-  if (client_id)  { query += ' AND c.user_id = ?';   params.push(client_id); }
-  if (serveur_id) { query += ' AND c.serveur_id = ?';params.push(serveur_id); }
-  query += ' ORDER BY c.opened_at DESC';
-
-  try {
-    const [orders] = await pool.query(query, params);
-    for (const order of orders) {
-      order.items = await loadItems(order.id);
-    }
-    return res.json(orders);
-  } catch (err) {
-    console.error('getAllOrders:', err);
-    return res.status(500).json({ message: 'Erreur serveur' });
-  }
-};
-
-// ── GET /api/orders/cuisine — commandes pour cuisinier ─────────
-const getOrdersForCuisinier = async (req, res) => {
-  try {
-    const [orders] = await pool.query(
-      `SELECT c.*, u.first_name, u.last_name, t.table_number
-       FROM commandes c
-       JOIN  users u ON c.user_id = u.id
-       LEFT JOIN tables_restaurant t ON c.table_id = t.id
-       WHERE c.status IN ('nouveau', 'en_preparation')
-       ORDER BY c.opened_at ASC`
-    );
-    for (const order of orders) {
-      order.items = await loadItems(order.id);
-    }
-    return res.json(orders);
-  } catch (err) {
-    console.error('getOrdersForCuisinier:', err);
-    return res.status(500).json({ message: 'Erreur serveur' });
-  }
-};
-
-// ── PATCH /api/orders/:id/take — prise en charge (cuisinier) ───
-const takeOrder = async (req, res) => {
-  try {
-    const [existing] = await pool.query('SELECT * FROM commandes WHERE id = ?', [req.params.id]);
-    if (!existing.length) return res.status(404).json({ message: 'Commande introuvable' });
-    if (existing[0].status !== 'nouveau') {
-      return res.status(400).json({ message: 'Commande déjà prise en charge' });
+    for (const item of items) {
+      await pool.execute(
+        'INSERT INTO order_items (commande_id, plat_id, quantity, unit_price) VALUES (?, ?, ?, ?)',
+        [commandeId, item.plat_id, item.quantity, item.unit_price]
+      );
     }
 
-    await pool.query("UPDATE commandes SET status = 'en_preparation' WHERE id = ?", [req.params.id]);
-    const [updated] = await pool.query('SELECT * FROM commandes WHERE id = ?', [req.params.id]);
+    // Générer un numéro de commande lisible
+    const orderNumber = `KP-${String(commandeId).padStart(4, '0')}`;
+    await pool.execute('UPDATE commandes SET order_number = ? WHERE id = ?', [orderNumber, commandeId]);
 
-    if (req.io) req.io.emit('order_in_progress', { orderId: req.params.id, status: 'en_preparation' });
-
-    return res.json(updated[0]);
-  } catch (err) {
-    console.error('takeOrder:', err);
-    return res.status(500).json({ message: 'Erreur serveur' });
-  }
-};
-
-// ── PATCH /api/orders/:id/ready — commande prête (cuisinier) ───
-const markOrderReady = async (req, res) => {
-  try {
-    const [existing] = await pool.query('SELECT * FROM commandes WHERE id = ?', [req.params.id]);
-    if (!existing.length) return res.status(404).json({ message: 'Commande introuvable' });
-    if (existing[0].status !== 'en_preparation') {
-      return res.status(400).json({ message: 'La commande doit être en préparation pour être marquée prête' });
+    if (req.io) {
+      req.io.to('cuisine').emit('new_order', { commande_id: commandeId, order_number: orderNumber });
     }
 
-    await pool.query("UPDATE commandes SET status = 'pret' WHERE id = ?", [req.params.id]);
-    const [updated] = await pool.query('SELECT * FROM commandes WHERE id = ?', [req.params.id]);
-
-    if (req.io) req.io.emit('order_ready', { orderId: req.params.id, status: 'pret' });
-
-    return res.json(updated[0]);
+    return res.status(201).json({ commande_id: commandeId, order_number: orderNumber, total_amount: total });
   } catch (err) {
-    console.error('markOrderReady:', err);
-    return res.status(500).json({ message: 'Erreur serveur' });
+    console.error('createOrder:', err);
+    return res.status(500).json({ message: 'Erreur serveur', detail: err.message });
   }
 };
 
-// ── PATCH /api/orders/:id/cancel — annuler une commande ────────
-const cancelOrder = async (req, res) => {
+// ── DELETE /api/orders/:id ────────────────────────────────────
+exports.deleteOrder = async (req, res) => {
   try {
-    const { motif } = req.body;
-    const [existing] = await pool.query('SELECT * FROM commandes WHERE id = ?', [req.params.id]);
-    if (!existing.length) return res.status(404).json({ message: 'Commande introuvable' });
-
-    await pool.query("UPDATE commandes SET status = 'annule' WHERE id = ?", [req.params.id]);
-    const [updated] = await pool.query('SELECT * FROM commandes WHERE id = ?', [req.params.id]);
-
-    if (req.io) req.io.emit('order_cancelled', { orderId: req.params.id, motif: motif || 'Annulée' });
-
-    return res.json(updated[0]);
+    await pool.execute("UPDATE commandes SET status = 'ANNULEE' WHERE id = ?", [req.params.id]);
+    return res.json({ message: 'Commande annulée' });
   } catch (err) {
-    console.error('cancelOrder:', err);
     return res.status(500).json({ message: 'Erreur serveur' });
   }
-};
-
-// ── À implémenter (feat/serveur-admin) ────────────────────────
-const assignOrder  = (_req, res) => res.status(501).json({ message: 'À implémenter par feat/serveur-admin' });
-const deliverOrder = (_req, res) => res.status(501).json({ message: 'À implémenter par feat/serveur-admin' });
-
-module.exports = {
-  create,
-  getOne,
-  getMine,
-  getAllOrders,
-  getOrdersForCuisinier,
-  takeOrder,
-  markOrderReady,
-  cancelOrder,
-  assignOrder,
-  deliverOrder,
 };

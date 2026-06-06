@@ -6,14 +6,15 @@ const { Server } = require('socket.io');
 require('dotenv').config();
 
 // ── Routes ─────────────────────────────────────────────────────
-// ✅ Seulement les routes dont les fichiers existent réellement
-const authRoutes  = require('./routes/authRoutes');
-const dishRoutes  = require('./routes/dishRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-const tableRoutes = require('./routes/tableRoutes');
-const userRoutes  = require('./routes/userRoutes');
-// ❌ Supprimés car fichiers inexistants (causeraient un crash immédiat) :
-//    reviewRoutes, statsRoutes, platRoutes, notificationRoutes
+const authRoutes         = require('./routes/authRoutes');
+const dishRoutes         = require('./routes/dishRoutes');
+const orderRoutes        = require('./routes/orderRoutes');
+const tableRoutes        = require('./routes/tableRoutes');
+const userRoutes         = require('./routes/userRoutes');
+const statsRoutes        = require('./routes/statsRoutes');
+const reviewRoutes       = require('./routes/reviewRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const paymentRoutes      = require('./routes/paymentRoutes');
 
 const { initSocket } = require('./socket/socketHandlers');
 
@@ -32,19 +33,19 @@ const io = new Server(server, {
 // ── Middlewares globaux ────────────────────────────────────────
 app.use(cors({ origin: process.env.SOCKET_CORS_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json());
-
-// Servir les fichiers uploadés (images, etc.)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-// Injecter l'instance Socket.io dans chaque requête
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));  // ← corrigé
 app.use((req, _res, next) => { req.io = io; next(); });
 
-// ── Déclaration des routes ─────────────────────────────────────
-app.use('/api/auth',   authRoutes);
-app.use('/api/dishes', dishRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/tables', tableRoutes);
-app.use('/api/users',  userRoutes);
+// ── Routes ─────────────────────────────────────────────────────
+app.use('/api/auth',          authRoutes);
+app.use('/api/dishes',        dishRoutes);
+app.use('/api/orders',        orderRoutes);
+app.use('/api/tables',        tableRoutes);
+app.use('/api/users',         userRoutes);
+app.use('/api/stats',         statsRoutes);
+app.use('/api/reviews',       reviewRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/payments',      paymentRoutes);
 
 // ── Health check ───────────────────────────────────────────────
 app.get('/health', (_req, res) =>
@@ -60,15 +61,6 @@ initSocket(io);
 // ── Démarrage ─────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`\n🍴  KitchenPulse backend → http://localhost:${PORT}`);
-  console.log(`✅  Routes actives :`);
-  console.log(`    GET  /health`);
-  console.log(`    POST /api/auth/register`);
-  console.log(`    POST /api/auth/login`);
-  console.log(`    GET  /api/auth/me`);
-  console.log(`    GET  /api/dishes`);
-  console.log(`    GET  /api/dishes/categories`);
-  console.log(`    GET  /api/orders`);
-  console.log(`    GET  /api/tables`);
-  console.log(`    GET  /api/users\n`);
+  console.log(`\nKitchenPulse backend → http://localhost:${PORT}`);
+  console.log('Routes actives : auth, dishes, orders, tables, users, stats, reviews, notifications, payments\n');
 });
