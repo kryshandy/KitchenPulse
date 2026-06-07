@@ -17,7 +17,7 @@ exports.getOrders = async (req, res) => {
              u.first_name, u.last_name
       FROM commandes c
       LEFT JOIN tables_restaurant t ON c.table_id = t.id
-      LEFT JOIN users u ON c.client_id = u.id
+      LEFT JOIN users u ON c.user_id = u.id
       WHERE 1=1
     `;
     const params = [];
@@ -30,8 +30,8 @@ exports.getOrders = async (req, res) => {
     }
 
     // Client ne voit que ses propres commandes
-    if (user.role === 'CLIENT') {
-      sql += ' AND c.client_id = ?';
+    if (user.role === 'client' || user.role === 'CLIENT') {
+      sql += ' AND c.user_id = ?';
       params.push(user.id);
     }
 
@@ -105,7 +105,7 @@ exports.getOrderById = async (req, res) => {
       `SELECT c.*, t.table_number AS table_numero, u.first_name, u.last_name
        FROM commandes c
        LEFT JOIN tables_restaurant t ON c.table_id = t.id
-       LEFT JOIN users u ON c.client_id = u.id
+       LEFT JOIN users u ON c.user_id = u.id
        WHERE c.id = ?`,
       [req.params.id]
     );
@@ -135,9 +135,9 @@ exports.createOrder = async (req, res) => {
   try {
     const total = items.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
     const [result] = await pool.execute(
-      `INSERT INTO commandes (client_id, table_id, notes, total_amount, status, payment_status, opened_at)
-       VALUES (?, ?, ?, ?, 'RECUE', 'EN_ATTENTE', NOW())`,
-      [req.user.id, table_id, notes || null, total]
+      `INSERT INTO commandes (user_id, table_id, notes, subtotal, total_amount, order_number, status, payment_status, opened_at)
+       VALUES (?, ?, ?, ?, ?, 'TEMP', 'RECUE', 'EN_ATTENTE', NOW())`,
+      [req.user.id, table_id, notes || null, total, total]
     );
     const commandeId = result.insertId;
 

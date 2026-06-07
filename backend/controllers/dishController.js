@@ -29,11 +29,11 @@ const getAllDishes = async (req, res) => {
   const { category, search, disponible } = req.query;
   let sql = `
     SELECT p.*, c.name AS category_name, c.icon AS category_icon, c.color_hex,
-           COALESCE(vp.note_moyenne, 0) AS note_moyenne,
-           COALESCE(vp.nb_avis, 0)     AS nb_avis
+           COALESCE((SELECT ROUND(AVG(a.note),1) FROM avis a WHERE a.plat_id = p.id), 0) AS note_moyenne,
+           COALESCE((SELECT COUNT(*) FROM avis a WHERE a.plat_id = p.id), 0) AS nb_avis
     FROM plats p
     JOIN  categories c    ON p.category_id = c.id
-    LEFT JOIN v_plats_notes vp ON vp.id = p.id
+    
     WHERE 1=1
   `;
   const params = [];
@@ -69,11 +69,11 @@ const getDishById = async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT p.*, c.name AS category_name, c.icon AS category_icon,
-              COALESCE(vp.note_moyenne, 0) AS note_moyenne,
-              COALESCE(vp.nb_avis, 0)     AS nb_avis
+              COALESCE((SELECT ROUND(AVG(a.note),1) FROM avis a WHERE a.plat_id = p.id), 0) AS note_moyenne,
+              COALESCE((SELECT COUNT(*) FROM avis a WHERE a.plat_id = p.id), 0) AS nb_avis
        FROM plats p
        JOIN  categories c ON p.category_id = c.id
-       LEFT JOIN v_plats_notes vp ON vp.id = p.id
+       
        WHERE p.id = ?`, [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ message: 'Plat introuvable' });

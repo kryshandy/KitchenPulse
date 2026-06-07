@@ -272,90 +272,95 @@ const FileCommandes = ({ toast, T }) => {
           Aucune commande {filter !== "TOUS" ? `« ${STATUT_CFG[filter]?.label} »` : "active"}
         </div>
       ) : (
-        displayed.map(order => {
-          const cfg = STATUT_CFG[order.status] || { label: order.status, color: T.muted, bg: T.surface };
-          const timer = useTimer(order._startTs);
+        displayed.map(order => (
+          <OrderCard key={order.id} order={order} T={T} updateStatus={updateStatus} STATUT_CFG={STATUT_CFG} />
+        ))
+      )}
+    </div>
+  );
+};
 
-          return (
-            <div key={order.id} style={{
-              background: T.card, border: `1px solid ${T.border}`,
-              borderLeft: `3px solid ${cfg.color}`, borderRadius: 14,
-              padding: 16, marginBottom: 10,
-            }}>
-              {/* Header commande */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontWeight: 800, fontSize: 16, color: cfg.color }}>
-                  #{order.order_number || order.id}
-                </span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Tag color={cfg.color} bg={cfg.bg}>{cfg.label}</Tag>
-                  {order.status === "EN_PREPARATION" && (
-                    <span style={{ fontSize: 11, color: "#F0A500", fontWeight: 700 }}>⏱ {timer}</span>
-                  )}
-                </div>
-              </div>
+// ─── CARTE COMMANDE (hook useTimer isolé dans son propre composant) ──
+const OrderCard = ({ order, T, updateStatus, STATUT_CFG }) => {
+  const cfg   = STATUT_CFG[order.status] || { label: order.status, color: T.muted, bg: T.surface };
+  const timer = useTimer(order._startTs);
 
-              {/* Méta */}
-              <div style={{ display: "flex", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, color: T.sub, display: "flex", alignItems: "center", gap: 4 }}>
-                  {Ic.table} Table {order.table_number ?? order.table_numero ?? order.table_id}
-                </span>
-                <span style={{ fontSize: 12, color: T.sub, display: "flex", alignItems: "center", gap: 4 }}>
-                  {Ic.clock} {new Date(order.opened_at || order.created_at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              </div>
+  return (
+    <div style={{
+      background: T.card, border: `1px solid ${T.border}`,
+      borderLeft: `3px solid ${cfg.color}`, borderRadius: 14,
+      padding: 16, marginBottom: 10,
+    }}>
+      {/* Header commande */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ fontWeight: 800, fontSize: 16, color: cfg.color }}>
+          #{order.order_number || order.id}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Tag color={cfg.color} bg={cfg.bg}>{cfg.label}</Tag>
+          {order.status === "EN_PREPARATION" && (
+            <span style={{ fontSize: 11, color: "#F0A500", fontWeight: 700 }}>⏱ {timer}</span>
+          )}
+        </div>
+      </div>
 
-              {/* Items */}
-              <div style={{ background: T.surface, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
-                {(order.items || []).map((item, i) => (
-                  <div key={i} style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "5px 0",
-                    borderBottom: i < order.items.length - 1 ? `1px solid ${T.border}` : "none",
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{
-                        fontWeight: 700, fontSize: 11, color: T.accent,
-                        background: `${T.accent}20`, minWidth: 24, height: 22, borderRadius: 6,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>×{item.quantity}</span>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: T.text }}>
-                        {item.plat_nom ?? item.name ?? item.nom}
-                      </span>
-                    </div>
-                    {item.prep_time_minutes && (
-                      <span style={{ fontSize: 11, color: T.muted }}>{item.prep_time_minutes} min</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+      {/* Méta */}
+      <div style={{ display: "flex", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, color: T.sub, display: "flex", alignItems: "center", gap: 4 }}>
+          {Ic.table} Table {order.table_number ?? order.table_numero ?? order.table_id}
+        </span>
+        <span style={{ fontSize: 12, color: T.sub, display: "flex", alignItems: "center", gap: 4 }}>
+          {Ic.clock} {new Date(order.opened_at || order.created_at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </div>
 
-              {/* Notes spéciales */}
-              {order.notes && (
-                <div style={{ background: `${T.accent}15`, borderRadius: 8, padding: "8px 10px", marginBottom: 10, fontSize: 12, color: T.accent, display: "flex", gap: 6, alignItems: "flex-start" }}>
-                  {Ic.warn} {order.notes}
-                </div>
-              )}
-
-              {/* Actions */}
-              {order.status === "RECUE" && (
-                <Btn T={T} full variant="accent" onClick={() => updateStatus(order.id, "EN_PREPARATION", "Préparation démarrée !")}>
-                  {Ic.fire} Démarrer la préparation
-                </Btn>
-              )}
-              {order.status === "EN_PREPARATION" && (
-                <Btn T={T} full variant="success" onClick={() => updateStatus(order.id, "PRETE", "Commande marquée prête — serveur notifié !")}>
-                  {Ic.check} Marquer comme prête
-                </Btn>
-              )}
-              {order.status === "PRETE" && (
-                <div style={{ textAlign: "center", padding: "6px 0", color: T.green, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                  {Ic.check} En attente du serveur…
-                </div>
-              )}
+      {/* Items */}
+      <div style={{ background: T.surface, borderRadius: 10, padding: "10px 12px", marginBottom: 10 }}>
+        {(order.items || []).map((item, i) => (
+          <div key={i} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "5px 0",
+            borderBottom: i < order.items.length - 1 ? `1px solid ${T.border}` : "none",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{
+                fontWeight: 700, fontSize: 11, color: T.accent,
+                background: `${T.accent}20`, minWidth: 24, height: 22, borderRadius: 6,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>×{item.quantity}</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: T.text }}>
+                {item.plat_nom ?? item.name ?? item.nom}
+              </span>
             </div>
-          );
-        })
+            {item.prep_time_minutes && (
+              <span style={{ fontSize: 11, color: T.muted }}>{item.prep_time_minutes} min</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Notes spéciales */}
+      {order.notes && (
+        <div style={{ background: `${T.accent}15`, borderRadius: 8, padding: "8px 10px", marginBottom: 10, fontSize: 12, color: T.accent, display: "flex", gap: 6, alignItems: "flex-start" }}>
+          {Ic.warn} {order.notes}
+        </div>
+      )}
+
+      {/* Actions */}
+      {order.status === "RECUE" && (
+        <Btn T={T} full variant="accent" onClick={() => updateStatus(order.id, "EN_PREPARATION", "Préparation démarrée !")}>
+          {Ic.fire} Démarrer la préparation
+        </Btn>
+      )}
+      {order.status === "EN_PREPARATION" && (
+        <Btn T={T} full variant="success" onClick={() => updateStatus(order.id, "PRETE", "Commande marquée prête — serveur notifié !")}>
+          {Ic.check} Marquer comme prête
+        </Btn>
+      )}
+      {order.status === "PRETE" && (
+        <div style={{ textAlign: "center", padding: "6px 0", color: T.green, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          {Ic.check} En attente du serveur…
+        </div>
       )}
     </div>
   );
