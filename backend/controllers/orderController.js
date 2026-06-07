@@ -129,7 +129,7 @@ exports.getOrderById = async (req, res) => {
 // ── POST /api/orders ──────────────────────────────────────────
 exports.createOrder = async (req, res) => {
   const { table_id, notes, items } = req.body;
-  if (!table_id || !items?.length) {
+  if (table_id === undefined || table_id === null || table_id === '' || !items?.length) {
     return res.status(400).json({ message: 'table_id et items sont requis' });
   }
   try {
@@ -143,8 +143,8 @@ exports.createOrder = async (req, res) => {
 
     for (const item of items) {
       await pool.execute(
-        'INSERT INTO order_items (commande_id, plat_id, quantity, unit_price) VALUES (?, ?, ?, ?)',
-        [commandeId, item.plat_id, item.quantity, item.unit_price]
+        'INSERT INTO order_items (commande_id, plat_id, quantity, unit_price, item_total) VALUES (?, ?, ?, ?, ?)',
+        [commandeId, item.plat_id, item.quantity, item.unit_price, Number(item.unit_price) * Number(item.quantity)]
       );
     }
 

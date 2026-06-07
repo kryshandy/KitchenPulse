@@ -110,8 +110,12 @@ export default function Menu() {
           <div style={{ position: 'relative' }}>
             <span style={{
               position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)',
-              fontSize: 15, color: T.muted,
-            }}>🔍</span>
+              display: 'flex', alignItems: 'center', color: T.muted, pointerEvents: 'none',
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
             <input
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher un plat…"

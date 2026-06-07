@@ -1,77 +1,56 @@
-const db = require('../config/db');
+const pool = require('../config/db');
 
-/**
- * 🧑‍🍳 SERVEUR / ADMIN : Récupérer toutes les tables du restaurant
- * Permet au serveur de voir l'état de la salle en un coup d'œil
- */
+// GET /api/tables — liste toutes les tables actives
 const getAllTables = async (req, res) => {
   try {
-    const [tables] = await db.query(
-      'SELECT id, numero, capacite, statut, qr_code FROM tables_restaurant ORDER BY numero ASC'
+    const [tables] = await pool.query(
+      `SELECT t.*,
+              c.order_number, c.status AS order_status, c.total_amount
+       FROM tables_restaurant t
+       LEFT JOIN commandes c ON c.table_id = t.id
+         AND c.status NOT IN ('CLOTUREE','ANNULEE')
+       WHERE t.is_active = 1
+       ORDER BY t.table_number`
     );
-
-    return res.status(200).json({
-      success: true,
-      count: tables.length,
-      data: tables
-    });
-  } catch (error) {
-    console.error('❌ Erreur dans getAllTables :', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération de la liste des tables.'
-    });
+    res.json(tables);
+  } catch (err) {
+    console.error('getAllTables:', err);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 };
 
-/**
- * 🧑‍🍳 SERVEUR : Modifier le statut d'une table
- * Exemple : Passer le statut à 'LIBRE' après avoir nettoyé la table
- */
-const updateTableStatus = async (req, res) => {
-  const { id } = req.params;
-  const { statut } = req.body;
-
-  // Liste des statuts officiels définis dans l'ENUM de votre base de données finale
-  const statutsAutorises = ['LIBRE', 'RESERVEE', 'OCCUPEE', 'EN_SERVICE', 'ADDITION_DEMANDEE', 'EN_NETTOYAGE'];
-
-  if (!statut || !statutsAutorises.includes(statut.toUpperCase())) {
-    return res.status(400).json({
-      success: false,
-      message: `Statut invalide. Les statuts autorisés sont : ${statutsAutorises.join(', ')}`
-    });
-  }
-
+// GET /api/tables/:id
+const getTableById = async (req, res) => {
   try {
-    // Vérification de l'existence de la table
-    const [tableExists] = await db.query('SELECT id FROM tables_restaurant WHERE id = ?', [id]);
-    if (tableExists.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "La table spécifiée n'existe pas."
-      });
-    }
-
-    // Mise à jour du statut
-    await db.query(
-      'UPDATE tables_restaurant SET statut = ? WHERE id = ?',
-      [statut.toUpperCase(), id]
+    const [rows] = await pool.query(
+      'SELECT * FROM tables_restaurant WHERE id = ?',
+      [req.params.id]
     );
-
-    return res.status(200).json({
-      success: true,
-      message: `Le statut de la table a bien été mis à jour en ${statut.toUpperCase()}.`
-    });
-  } catch (error) {
-    console.error('❌ Erreur dans updateTableStatus :', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la mise à jour du statut de la table.'
-    });
+    if (!rows.length) return res.status(404).json({ message: 'Table introuvable' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('getTableById:', err);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 };
 
-module.exports = {
-  getAllTables,
-  updateTableStatus
+// PATCH /api/tables/:id/status
+const updateTableStatus = async (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ['LIBRE','OCCUPEE','EN_SERVICE','ADDITION_DEMANDEE','EN_NETTOYAGE','RESERVEE'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ message: 'Statut invalide' });
+  }
+  try {
+    await pool.query(
+      'UPDATE tables_restaurant SET status = ?, updated_at = NOW() WHERE id = ?',
+      [status, req.params.id]
+    );
+    res.json({ message: 'Statut mis à jour', status });
+  } catch (err) {
+    console.error('updateTableStatus:', err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
 };
+
+module.exports = { getAllTables, getTableById, updateTableStatus };
