@@ -1,11 +1,6 @@
-// backend/controllers/orderController.js
-// ⚠️  AJOUTE ces deux fonctions à ton orderController existant si elles manquent.
-// Si ton fichier est complet, vérifie juste que getOrders et updateOrderStatus existent.
-
 const pool = require('../config/db');
 
-// ── GET /api/orders?status=RECUE,EN_PREPARATION ────────────────
-// Utilisé par le cuisinier et le client
+// -- GET /api/orders?status=RECUE,EN_PREPARATION ---------------
 exports.getOrders = async (req, res) => {
   try {
     const { status } = req.query;
@@ -22,14 +17,12 @@ exports.getOrders = async (req, res) => {
     `;
     const params = [];
 
-    // Filtre par statut (liste séparée par virgules)
     if (status) {
       const statuses = status.split(',').map(s => s.trim());
       sql += ` AND c.status IN (${statuses.map(() => '?').join(',')})`;
       params.push(...statuses);
     }
 
-    // Client ne voit que ses propres commandes
     if (user.role === 'client' || user.role === 'CLIENT') {
       sql += ' AND c.user_id = ?';
       params.push(user.id);
@@ -39,7 +32,6 @@ exports.getOrders = async (req, res) => {
 
     const [orders] = await pool.query(sql, params);
 
-    // Charger les items de chaque commande
     if (orders.length) {
       const ids = orders.map(o => o.id);
       const [items] = await pool.query(
@@ -64,8 +56,9 @@ exports.getOrders = async (req, res) => {
   }
 };
 
-// ── PATCH /api/orders/:id/status ──────────────────────────────
-// Cycle : RECUE → EN_PREPARATION → PRETE → SERVIE → CLOTUREE
+// -- PATCH /api/orders/:id/status ------------------------------
+// Cycle : RECUE -> EN_PREPARATION -> PRETE -> SERVIE -> CLOTUREE
+// C'est ici que tout se passe — le socket ne fait QUE diffuser, pas mettre à jour la BDD
 exports.updateOrderStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -81,24 +74,26 @@ exports.updateOrderStatus = async (req, res) => {
 
     await pool.execute('UPDATE commandes SET status = ?, updated_at = NOW() WHERE id = ?', [status, id]);
 
-    // Émettre l'événement Socket.io si disponible
+    // Diffusion Socket.io — BDD déjà mise à jour ci-dessus
     if (req.io) {
       req.io.to('cuisine').emit('order_status_update', { orderId: id, status });
       req.io.to('salle').emit('order_status_update', { orderId: id, status });
       req.io.to(`order:${id}`).emit('order_status_update', { orderId: id, status });
+
+      // Notification dédiée au serveur quand un plat est prêt à être récupéré
       if (status === 'PRETE') {
         req.io.to('salle').emit('order_ready', { orderId: id });
       }
     }
 
-    return res.json({ message: `Commande passée à ${status}`, orderId: id, status });
+    return res.json({ message: `Commande passee a ${status}`, orderId: id, status });
   } catch (err) {
     console.error('updateOrderStatus:', err);
     return res.status(500).json({ message: 'Erreur serveur', detail: err.message });
   }
 };
 
-// ── GET /api/orders/:id ───────────────────────────────────────
+// -- GET /api/orders/:id ---------------------------------------
 exports.getOrderById = async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -126,14 +121,16 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// ── POST /api/orders ──────────────────────────────────────────
+// -- POST /api/orders ------------------------------------------
 exports.createOrder = async (req, res) => {
   const { table_id, notes, items } = req.body;
   if (table_id === undefined || table_id === null || table_id === '' || !items?.length) {
     return res.status(400).json({ message: 'table_id et items sont requis' });
   }
+
   try {
     const total = items.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
+
     const [result] = await pool.execute(
       `INSERT INTO commandes (user_id, table_id, notes, subtotal, total_amount, order_number, status, payment_status, opened_at)
        VALUES (?, ?, ?, ?, ?, 'TEMP', 'RECUE', 'EN_ATTENTE', NOW())`,
@@ -148,12 +145,36 @@ exports.createOrder = async (req, res) => {
       );
     }
 
-    // Générer un numéro de commande lisible
     const orderNumber = `KP-${String(commandeId).padStart(4, '0')}`;
     await pool.execute('UPDATE commandes SET order_number = ? WHERE id = ?', [orderNumber, commandeId]);
 
+    // -- Etape 3 : payload enrichi pour la cuisine --
+    // On récupère tout ce dont la cuisine a besoin en une seule requête
+    // pour éviter un second appel API côté frontend
     if (req.io) {
-      req.io.to('cuisine').emit('new_order', { commande_id: commandeId, order_number: orderNumber });
+      const [tableRows] = await pool.execute(
+        'SELECT table_number FROM tables_restaurant WHERE id = ?',
+        [table_id]
+      );
+      const [itemRows] = await pool.query(
+        `SELECT oi.quantity, oi.unit_price, oi.item_total,
+                p.name AS plat_nom, p.prep_time_minutes
+         FROM order_items oi
+         JOIN plats p ON oi.plat_id = p.id
+         WHERE oi.commande_id = ?`,
+        [commandeId]
+      );
+
+      req.io.to('cuisine').emit('new_order', {
+        commande_id:  commandeId,
+        order_number: orderNumber,
+        table_numero: tableRows[0]?.table_number ?? null,
+        client:       { id: req.user.id, prenom: req.user.first_name },
+        notes:        notes || null,
+        total:        total,
+        items:        itemRows,
+        created_at:   new Date().toISOString(),
+      });
     }
 
     return res.status(201).json({ commande_id: commandeId, order_number: orderNumber, total_amount: total });
@@ -163,11 +184,19 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-// ── DELETE /api/orders/:id ────────────────────────────────────
+// -- DELETE /api/orders/:id ------------------------------------
 exports.deleteOrder = async (req, res) => {
   try {
     await pool.execute("UPDATE commandes SET status = 'ANNULEE' WHERE id = ?", [req.params.id]);
-    return res.json({ message: 'Commande annulée' });
+
+    // Notifier cuisine et salle de l'annulation
+    if (req.io) {
+      req.io.to('cuisine').emit('order_status_update', { orderId: req.params.id, status: 'ANNULEE' });
+      req.io.to('salle').emit('order_status_update',   { orderId: req.params.id, status: 'ANNULEE' });
+      req.io.to(`order:${req.params.id}`).emit('order_status_update', { orderId: req.params.id, status: 'ANNULEE' });
+    }
+
+    return res.json({ message: 'Commande annulee' });
   } catch (err) {
     return res.status(500).json({ message: 'Erreur serveur' });
   }
