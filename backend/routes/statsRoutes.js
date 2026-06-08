@@ -10,4 +10,5 @@ router.get('/dashboard', verifyToken, verifyRole('ADMIN'), statsController.getDa
 // Permet aux serveurs de voir les commandes actives à livrer
 router.get('/active-orders', verifyToken, statsController.getActiveOrders);
 
+router.get('/weekly', verifyToken, verifyRole('ADMIN'), statsController.getWeeklyStats);
 module.exports = router;

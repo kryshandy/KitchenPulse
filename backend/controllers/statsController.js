@@ -80,3 +80,27 @@ module.exports = {
   getDashboardStats,
   getActiveOrders
 };
+/**
+ * CA des 7 derniers jours
+ */
+const getWeeklyStats = async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        DATE(opened_at)                AS jour,
+        COUNT(*)                       AS nb_commandes,
+        COALESCE(SUM(total_amount), 0) AS chiffre_affaires
+      FROM commandes
+      WHERE opened_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        AND status = 'CLOTUREE'
+      GROUP BY DATE(opened_at)
+      ORDER BY jour ASC
+    `);
+    return res.json(rows);
+  } catch (err) {
+    console.error('getWeeklyStats:', err.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+
+module.exports = { getDashboardStats, getActiveOrders, getWeeklyStats };
