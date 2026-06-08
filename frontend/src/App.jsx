@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+
+import SplashScreen from './pages/Auth/SplashScreen';
 
 // Auth
 import Login    from './pages/Auth/Login';
@@ -55,8 +58,8 @@ const RoleRedirect = () => {
   return <Navigate to="/menu" replace />;
 };
 
-// ─── Splash screen (optionnel) ────────────────────────────────
-const AppWithSplash = () => (
+// ─── Routes de l'app ─────────────────────────────────────────
+const AppRoutes = () => (
   <Routes>
     <Route path="/login"    element={<Login />} />
     <Route path="/register" element={<Register />} />
@@ -119,13 +122,28 @@ const AppWithSplash = () => (
   </Routes>
 );
 
+// ─── App racine avec Splash ───────────────────────────────────
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  // ✅ Efface le token à chaque lancement
+  // → le splash mène toujours vers Login, jamais vers une interface déjà connectée
+  useEffect(() => {
+    // Efface la session à chaque lancement → toujours passer par Login
+    localStorage.removeItem('kp_token');
+    localStorage.removeItem('kp_user');
+  }, []); // [] = s'exécute une seule fois au montage (= au lancement de l'app)
+
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <AppWithSplash />
-        </BrowserRouter>
+        {showSplash ? (
+          <SplashScreen onDone={() => setShowSplash(false)} />
+        ) : (
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        )}
       </AuthProvider>
     </ThemeProvider>
   );
