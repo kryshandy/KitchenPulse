@@ -25,13 +25,13 @@ const server = http.createServer(app);
 // ── Socket.io ──────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin:  process.env.SOCKET_CORS_ORIGIN || 'http://localhost:5173',
-    methods: ['GET', 'POST'],
+    origin:  '*',                              // ← changer ici
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],  // ← ajouter les méthodes
   },
 });
 
 // ── Middlewares globaux ────────────────────────────────────────
-app.use(cors({ origin: process.env.SOCKET_CORS_ORIGIN || 'http://localhost:5173' }));
+app.use(cors({ origin: '*' }));               // ← changer ici
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));  // ← corrigé
 app.use((req, _res, next) => { req.io = io; next(); });

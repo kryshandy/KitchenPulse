@@ -5,10 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true,                          // ← ajouter cette ligne
     proxy: {
-      // Toutes les requêtes /api proxiées vers le backend (inclut /api/auth)
       '/api': {
-        target:       'http://localhost:3001',
+        target: 'http://10.247.191.245:3001',  // ← changer ici
         changeOrigin: true,
       },
     },

@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const ROLE_ROOMS = {
   cuisinier: ['cuisine'],
   serveur:   ['salle'],
-  admin:     ['cuisine', 'salle'],
+  admin:     ['cuisine', 'salle', 'admin'],
   client:    [],
 };
 

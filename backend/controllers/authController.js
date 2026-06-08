@@ -1,9 +1,3 @@
-/**
- * authController.js — KitchenPulse
- * CORRECTION PRINCIPALE : le rôle ENUM en BD est en minuscules
- * ('client','serveur','cuisinier','admin') → on insère en minuscules.
- * C'était la cause du insertId = 0 et de tous les bugs en cascade.
- */
 const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
 const pool   = require('../config/db');
@@ -11,7 +5,7 @@ const pool   = require('../config/db');
 const SECRET  = process.env.JWT_SECRET || 'kitchenpulse_secret';
 const EXPIRES = '7d';
 
-// ── POST /api/auth/register ────────────────────────────────────
+// -- POST /api/auth/register -----------------------------------
 const register = async (req, res) => {
   const {
     first_name, last_name, email, phone, password, role,
@@ -22,47 +16,48 @@ const register = async (req, res) => {
   } = req.body;
 
   if (!first_name || !last_name || !password) {
-    return res.status(400).json({ message: 'Prénom, nom et mot de passe requis' });
+    return res.status(400).json({ message: 'Prenom, nom et mot de passe requis' });
   }
   if (!email && !phone) {
-    return res.status(400).json({ message: 'Email ou téléphone requis' });
+    return res.status(400).json({ message: 'Email ou telephone requis' });
   }
 
-  // ⚠️ ENUM en BD = minuscules : 'client','serveur','cuisinier','admin'
   const allowedRoles = ['client', 'serveur', 'cuisinier'];
-  const rawRole = (role || 'client').toLowerCase();
+  const rawRole  = (role || 'client').toLowerCase();
   const userRole = allowedRoles.includes(rawRole) ? rawRole : 'client';
+
+  // Serveur et cuisinier doivent être validés par l'admin avant de pouvoir se connecter
+  const needsApproval = ['serveur', 'cuisinier'].includes(userRole);
+  const isActive      = needsApproval ? 0 : 1;
 
   try {
     if (email) {
       const [rows] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
-      if (rows.length) return res.status(409).json({ message: 'Email déjà utilisé' });
+      if (rows.length) return res.status(409).json({ message: 'Email deja utilise' });
     }
     if (phone) {
       const [rows] = await pool.query('SELECT id FROM users WHERE phone = ?', [phone]);
-      if (rows.length) return res.status(409).json({ message: 'Téléphone déjà utilisé' });
+      if (rows.length) return res.status(409).json({ message: 'Telephone deja utilise' });
     }
 
     const password_hash = await bcrypt.hash(password, 10);
 
     const [result] = await pool.query(
-      `INSERT INTO users (first_name, last_name, email, phone, password_hash, role)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [first_name, last_name, email || null, phone || null, password_hash, userRole]
+      `INSERT INTO users (first_name, last_name, email, phone, password_hash, role, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [first_name, last_name, email || null, phone || null, password_hash, userRole, isActive]
     );
     const userId = result.insertId;
 
-    // Garde-fou : si l'INSERT a échoué silencieusement
     if (!userId) {
       console.error('register: insertId invalide', result);
-      return res.status(500).json({ message: 'Erreur lors de la création du compte (id invalide)' });
+      return res.status(500).json({ message: 'Erreur lors de la creation du compte' });
     }
 
-    // ── Profil nutritionnel + allergies (CLIENT uniquement) ──
+    // -- Profil nutritionnel + allergies (CLIENT uniquement) --
     if (userRole === 'client') {
       try {
         const np = nutrition || {};
-
         const [profileResult] = await pool.query(
           `INSERT INTO nutrition_profiles
             (user_id, diet, goal, activity_level, sport_type,
@@ -102,11 +97,11 @@ const register = async (req, res) => {
         console.warn('Erreur profil nutritionnel (non bloquant):', profileErr.message);
       }
 
-      // ── Assignation de table ──
+      // -- Assignation de table --
       try {
         let targetTableNumber = null;
         if (delivery_mode === 'livraison') {
-          targetTableNumber = 0; // table spéciale livraison
+          targetTableNumber = 0;
         } else if (delivery_mode === 'table' && table_number) {
           targetTableNumber = Number(table_number);
         }
@@ -128,6 +123,55 @@ const register = async (req, res) => {
       }
     }
 
+    // -- Notification admin pour serveur et cuisinier --
+    if (needsApproval) {
+      try {
+        // Récupérer tous les admins actifs
+        const [admins] = await pool.query(
+          "SELECT id FROM users WHERE role = 'admin' AND is_active = 1"
+        );
+
+        const roleLabel = userRole === 'serveur' ? 'Serveur' : 'Cuisinier';
+
+        for (const admin of admins) {
+          await pool.query(
+            `INSERT INTO notifications (recipient_id, type, title, body, payload, is_read, push_sent, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 0, 0, NOW(), NOW())`,
+            [
+              admin.id,
+              'staff_approval_pending',
+              `Nouvelle demande ${roleLabel}`,
+              `${first_name} ${last_name} souhaite rejoindre l'equipe en tant que ${roleLabel}. Veuillez valider ou refuser sa demande.`,
+              JSON.stringify({ user_id: userId, role: userRole, email: email || null, phone: phone || null }),
+            ]
+          );
+        }
+
+        // Notifier l'admin en temps réel via Socket.io si disponible
+        if (req.io) {
+          req.io.to('admin').emit('staff_approval_pending', {
+            user_id:    userId,
+            first_name,
+            last_name,
+            role:       userRole,
+            email:      email || null,
+            phone:      phone || null,
+            created_at: new Date().toISOString(),
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Notification admin (non bloquant):', notifErr.message);
+      }
+
+      // On ne retourne pas de token — le compte est inactif
+      return res.status(201).json({
+        message: `Demande envoyee. Votre compte ${userRole} est en attente de validation par un administrateur.`,
+        pending: true,
+        user: { id: userId, first_name, last_name, email, phone, role: userRole, is_active: 0 },
+      });
+    }
+
+    // -- Client : token immédiat --
     const token = jwt.sign(
       { id: userId, role: userRole, first_name, last_name },
       SECRET,
@@ -135,7 +179,7 @@ const register = async (req, res) => {
     );
 
     return res.status(201).json({
-      message: 'Compte créé avec succès.',
+      message: 'Compte cree avec succes.',
       token,
       user: { id: userId, first_name, last_name, email, phone, role: userRole },
     });
@@ -145,7 +189,7 @@ const register = async (req, res) => {
   }
 };
 
-// ── POST /api/auth/login ───────────────────────────────────────
+// -- POST /api/auth/login --------------------------------------
 const login = async (req, res) => {
   const { email, phone, password } = req.body;
 
@@ -166,12 +210,20 @@ const login = async (req, res) => {
     if (!rows.length) return res.status(401).json({ message: 'Identifiants incorrects' });
 
     const user = rows[0];
-    if (!user.is_active) return res.status(403).json({ message: 'Compte désactivé' });
+
+    // Compte en attente de validation (serveur/cuisinier non encore approuvé)
+    if (!user.is_active && ['serveur', 'cuisinier'].includes(user.role)) {
+      return res.status(403).json({
+        message: 'Votre compte est en attente de validation par un administrateur.',
+        pending: true,
+      });
+    }
+
+    if (!user.is_active) return res.status(403).json({ message: 'Compte desactive' });
 
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ message: 'Identifiants incorrects' });
 
-    // Allergies — filtré par user_id pour isoler chaque client
     let allergies = [];
     try {
       const [a] = await pool.query(
@@ -185,7 +237,6 @@ const login = async (req, res) => {
       allergies = a;
     } catch {}
 
-    // Profil nutritionnel
     let nutritionProfile = null;
     try {
       const [np] = await pool.query(
@@ -198,7 +249,6 @@ const login = async (req, res) => {
       if (np.length) nutritionProfile = np[0];
     } catch {}
 
-    // Table assignée (pour le Panier)
     let tableAssigned = null;
     try {
       const [ta] = await pool.query(
@@ -221,14 +271,14 @@ const login = async (req, res) => {
     );
 
     return res.status(200).json({
-      message: 'Connexion réussie.',
+      message: 'Connexion reussie.',
       token,
       user: {
         id: user.id, first_name: user.first_name, last_name: user.last_name,
         email: user.email, phone: user.phone, role: user.role,
         allergies,
         nutrition: nutritionProfile,
-        table: tableAssigned, // ← dispo dans le Panier via useAuth()
+        table: tableAssigned,
       },
     });
   } catch (err) {
@@ -237,7 +287,7 @@ const login = async (req, res) => {
   }
 };
 
-// ── GET /api/auth/me ───────────────────────────────────────────
+// -- GET /api/auth/me ------------------------------------------
 const getMe = async (req, res) => {
   try {
     const [rows] = await pool.query(
