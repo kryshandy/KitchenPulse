@@ -61,28 +61,36 @@ const STATUS_LABEL = {
   ANNULEE:        { label: 'Annulée',        color: '#F56565', bg: 'rgba(245,101,101,.15)' },
 };
 
-// Modes de paiement
 const PAY_MODES = [
-  { id: 'MTN_MOMO',       label: 'MTN MoMo',      Icon: IcPhone },
-  { id: 'ORANGE_MONEY',   label: 'Orange Money',  Icon: IcPhone },
-  { id: 'CARTE_BANCAIRE', label: 'Carte bancaire',Icon: IcCard  },
-  { id: 'CAISSE',         label: 'Caisse',        Icon: IcCash  },
-  { id: 'QR_LOCAL',       label: 'QR Code',       Icon: IcQr    },
+  { id: 'MTN_MOMO',       label: 'MTN MoMo',       Icon: IcPhone },
+  { id: 'ORANGE_MONEY',   label: 'Orange Money',   Icon: IcPhone },
+  { id: 'CARTE_BANCAIRE', label: 'Carte bancaire', Icon: IcCard  },
+  { id: 'CAISSE',         label: 'Caisse',         Icon: IcCash  },
+  { id: 'QR_LOCAL',       label: 'QR Code',        Icon: IcQr    },
 ];
 
 const NOTE_LABELS = ['','Mauvais','Passable','Bien','Très bien','Excellent !'];
 
+// ─── Helper heure Yaoundé ─────────────────────────────────────
+const formatHeure = (dateStr) => {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Africa/Douala',
+  });
+};
+
 // ─── Modal Paiement + Avis ────────────────────────────────────
 function PayModal({ order, T, onClose, onDone }) {
-  const [step,       setStep]       = useState('pay'); // 'pay' | 'avis'
+  const [step,       setStep]       = useState('pay');
   const [payMode,    setPayMode]    = useState('');
   const [paying,     setPaying]     = useState(false);
   const [payMsg,     setPayMsg]     = useState('');
   const [payOk,      setPayOk]      = useState(false);
 
-  // Avis
   const items = order.items || [];
-  const [notes,    setNotes]    = useState({});   // { plat_id: note }
+  const [notes,    setNotes]    = useState({});
   const [hovered,  setHovered]  = useState({});
   const [comments, setComments] = useState({});
   const [sending,  setSending]  = useState(false);
@@ -128,10 +136,8 @@ function PayModal({ order, T, onClose, onDone }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: T.card, borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '92vh', overflowY: 'auto', padding: '20px 20px 40px' }}>
 
-        {/* Handle */}
         <div style={{ width: 36, height: 4, borderRadius: 2, background: T.border, margin: '0 auto 16px' }} />
 
-        {/* ── ÉTAPE PAIEMENT ── */}
         {step === 'pay' && (
           <>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: T.text, marginBottom: 4 }}>Paiement</h2>
@@ -198,7 +204,6 @@ function PayModal({ order, T, onClose, onDone }) {
           </>
         )}
 
-        {/* ── ÉTAPE AVIS ── */}
         {step === 'avis' && (
           <>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: T.text, marginBottom: 4 }}>Votre avis</h2>
@@ -212,7 +217,7 @@ function PayModal({ order, T, onClose, onDone }) {
               </p>
             )}
 
-            {items.map((item, idx) => {
+            {items.map((item) => {
               const platId   = item.plat_id;
               const platName = item.plat_nom || item.name;
               const isSent   = sent[platId];
@@ -235,7 +240,6 @@ function PayModal({ order, T, onClose, onDone }) {
 
                   {!isSent && (
                     <>
-                      {/* Étoiles */}
                       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                         {[1,2,3,4,5].map(n => (
                           <button key={n}
@@ -255,7 +259,6 @@ function PayModal({ order, T, onClose, onDone }) {
                         )}
                       </div>
 
-                      {/* Commentaire */}
                       <textarea
                         value={comments[platId] || ''}
                         onChange={e => setComments(p => ({ ...p, [platId]: e.target.value }))}
@@ -349,7 +352,6 @@ export default function SuiviCommande() {
       <div style={{ minHeight: '100vh', background: T.bg, fontFamily: font, paddingBottom: 100 }}>
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px' }}>
 
-          {/* Titre */}
           <div style={{ marginBottom: 20 }}>
             <h1 style={{ fontFamily: fontD, fontSize: 22, color: T.text, marginBottom: 4 }}>
               Suivi de commande
@@ -380,7 +382,6 @@ export default function SuiviCommande() {
             </div>
           )}
 
-          {/* Sélecteur commandes */}
           {orders.length > 1 && (
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 16, paddingBottom: 4, scrollbarWidth: 'none' }}>
               {orders.map(o => {
@@ -409,7 +410,6 @@ export default function SuiviCommande() {
             return (
               <div style={{ animation: 'fadeUp .3s ease' }}>
 
-                {/* Card principale */}
                 <div style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 18, padding: 20, marginBottom: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
                     <div>
@@ -418,7 +418,7 @@ export default function SuiviCommande() {
                       </p>
                       <p style={{ color: T.muted, fontSize: 12 }}>
                         Table {selected.table_numero ?? selected.table_id}
-                        {selected.opened_at ? ` · ${new Date(selected.opened_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                        {selected.opened_at ? ` · ${formatHeure(selected.opened_at)}` : ''}
                       </p>
                     </div>
                     <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}40`, padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
@@ -426,7 +426,6 @@ export default function SuiviCommande() {
                     </span>
                   </div>
 
-                  {/* Barre progression */}
                   {!['CLOTUREE', 'ANNULEE'].includes(selected.status) && (
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative' }}>
@@ -453,7 +452,6 @@ export default function SuiviCommande() {
                           );
                         })}
                       </div>
-                      {/* Ligne */}
                       <div style={{ height: 3, background: T.border, borderRadius: 2, margin: '-38px 20px 28px', position: 'relative', zIndex: 0 }}>
                         <div style={{
                           position: 'absolute', left: 0, top: 0, height: '100%',
@@ -472,7 +470,6 @@ export default function SuiviCommande() {
                   </div>
                 </div>
 
-                {/* Articles */}
                 <div style={{ background: T.card, border: `1.5px solid ${T.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
                   <p style={{ fontSize: 10, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, marginBottom: 12 }}>
                     Détail de la commande
@@ -496,7 +493,6 @@ export default function SuiviCommande() {
                   )}
                 </div>
 
-                {/* Notes */}
                 {selected.notes && (
                   <div style={{ background: `${T.accent}10`, border: `1px solid ${T.accent}30`, borderRadius: 12, padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                     <IcNote color={T.accent} />
@@ -504,7 +500,6 @@ export default function SuiviCommande() {
                   </div>
                 )}
 
-                {/* Bouton Payer après livraison */}
                 {isLivree && selected.payment_status !== 'PAYE' && (
                   <button onClick={() => setShowPay(true)} style={{
                     width: '100%', padding: 14, background: T.accent,
@@ -516,7 +511,6 @@ export default function SuiviCommande() {
                   </button>
                 )}
 
-                {/* Déjà payé */}
                 {isLivree && selected.payment_status === 'PAYE' && (
                   <div style={{ background: `${T.green}15`, border: `1px solid ${T.green}40`, borderRadius: 12, padding: 14, textAlign: 'center' }}>
                     <p style={{ color: T.green, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -530,7 +524,6 @@ export default function SuiviCommande() {
         </div>
       </div>
 
-      {/* Modal Paiement + Avis */}
       {showPay && selected && (
         <PayModal
           order={selected}

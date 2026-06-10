@@ -308,7 +308,7 @@ const GestionMenu = ({ toast, T }) => {
     }));
     setIngredients(existingIngs);
     setImgFile(null);
-    setImgPrev(dish.image_url?`http://localhost:3001${dish.image_url}`:null);
+    setImgPrev(dish.image_url || null);
     setShowModal(true);
   };
 
@@ -442,7 +442,7 @@ const GestionMenu = ({ toast, T }) => {
             <div style={{ display:"flex",gap:12,alignItems:"center" }}>
               <div style={{ width:56,height:56,borderRadius:12,overflow:"hidden",flexShrink:0,background:T.surface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.muted }}>
                 {dish.image_url
-                  ? <img src={`http://localhost:3001${dish.image_url}`} alt={dish.name} style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>{ e.target.style.display="none"; }}/>
+                  ? <img src={dish.image_url} alt={dish.name} style={{ width:"100%",height:"100%",objectFit:"cover" }} onError={e=>{ e.target.style.display="none"; }}/>
                   : Ic.img
                 }
               </div>

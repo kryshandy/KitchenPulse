@@ -25,15 +25,15 @@ const server = http.createServer(app);
 // ── Socket.io ──────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin:  '*',                              // ← changer ici
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],  // ← ajouter les méthodes
+    origin:  '*',
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
   },
 });
 
 // ── Middlewares globaux ────────────────────────────────────────
-app.use(cors({ origin: '*' }));               // ← changer ici
+app.use(cors({ origin: '*' }));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));  // ← corrigé
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use((req, _res, next) => { req.io = io; next(); });
 
 // ── Routes ─────────────────────────────────────────────────────
@@ -60,7 +60,12 @@ initSocket(io);
 
 // ── Démarrage ─────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+
+// ✅ FIX RÉSEAU : écoute sur toutes les interfaces (0.0.0.0)
+// Toutes les machines du réseau peuvent maintenant atteindre le backend
+server.listen(PORT, '0.0.0.0', () => {
+  const ip = process.env.SERVER_IP || '10.247.191.245';
   console.log(`\nKitchenPulse backend → http://localhost:${PORT}`);
+  console.log(`KitchenPulse réseau  → http://${ip}:${PORT}`);
   console.log('Routes actives : auth, dishes, orders, tables, users, stats, reviews, notifications, payments\n');
 });

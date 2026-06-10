@@ -85,7 +85,8 @@ const rejectUser = async (req, res) => {
     const user = rows[0];
 
     // Supprimer le compte refusé
-    await db.query('DELETE FROM users WHERE id = ?', [id]);
+    // ✅ Après — désactiver seulement, ne pas supprimer
+    await db.query('UPDATE users SET is_active = 0, updated_at = NOW() WHERE id = ?', [id]);
 
     // Marquer les notifications liées comme lues
     await db.query(
@@ -114,7 +115,18 @@ const rejectUser = async (req, res) => {
 // -- PUT /api/users/:id — modifier rôle / statut (admin) -------
 const updateUserRole = async (req, res) => {
   const { id } = req.params;
-  const { role } = req.body;
+  const { role, is_active } = req.body;  // ← accepter is_active aussi
+
+  // Si on reçoit seulement is_active (sans role)
+  if (is_active !== undefined && role === undefined) {
+    try {
+      await db.query('UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?', 
+        [is_active ? 1 : 0, id]);
+      return res.status(200).json({ success: true, message: 'Statut mis à jour' });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: 'Erreur serveur' });
+    }
+  }
 
   const rolesAutorises = ['client', 'serveur', 'cuisinier', 'admin'];
   if (!role || !rolesAutorises.includes(role.toLowerCase())) {
@@ -129,17 +141,33 @@ const updateUserRole = async (req, res) => {
     if (!userExists.length) {
       return res.status(404).json({ success: false, message: "L'utilisateur n'existe pas." });
     }
-
     await db.query('UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?', [role.toLowerCase(), id]);
-
-    return res.status(200).json({
-      success: true,
-      message: `Role mis a jour : ${role.toLowerCase()}`,
-    });
+    return res.status(200).json({ success: true, message: `Role mis a jour : ${role.toLowerCase()}` });
   } catch (error) {
-    console.error('updateUserRole:', error.message);
     return res.status(500).json({ success: false, message: 'Erreur lors de la mise a jour du role.' });
   }
 };
+// -- PATCH /api/users/:id/toggle — activer/désactiver (admin) --
+const toggleUserActive = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await db.query('SELECT id, first_name, last_name, is_active FROM users WHERE id = ?', [id]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Utilisateur introuvable.' });
+    }
+    const u = rows[0];
+    const newStatus = u.is_active ? 0 : 1;   // inverser le statut
+    await db.query('UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?', [newStatus, id]);
+    return res.status(200).json({
+      success: true,
+      message: `${u.first_name} ${newStatus ? 'activé' : 'désactivé'} avec succès.`,
+      is_active: newStatus,
+    });
+  } catch (error) {
+    console.error('toggleUserActive:', error.message);
+    return res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
 
-module.exports = { getAllUsers, getPendingUsers, approveUser, rejectUser, updateUserRole };
+//module.exports = { getAllUsers, getPendingUsers, approveUser, rejectUser, updateUserRole };
+module.exports = { getAllUsers, getPendingUsers, approveUser, rejectUser, updateUserRole, toggleUserActive };

@@ -32,7 +32,7 @@ export default function Menu() {
   const [activeCat, setActiveCat] = useState('');
   const [search,    setSearch]    = useState('');
   const [loading,   setLoading]   = useState(true);
-  const [modal,     setModal]     = useState(null);  // plat sélectionné
+  const [modal,     setModal]     = useState(null);
 
   useEffect(() => {
     api.get('/dishes/categories').then(r => setCategories(r.data)).catch(() => {});
@@ -62,7 +62,7 @@ export default function Menu() {
       const ex = prev.find(i => i.plat_id === dish.id);
       if (!ex && delta > 0) return [...prev, {
         plat_id: dish.id, quantity: 1, name: dish.name,
-        price: dish.price, mods: [], note: '',
+        price: Number(dish.price), mods: [], note: '',
       }];
       if (!ex) return prev;
       const nq = ex.quantity + delta;
@@ -77,7 +77,7 @@ export default function Menu() {
       const ex = prev.find(i => i.plat_id === d.id);
       const entry = {
         plat_id: d.id, quantity: (ex?.quantity || 0) + 1,
-        name: d.name, price: d.price,
+        name: d.name, price: Number(d.price),
         mods: d.selMods || [], note: d.customNote || '',
       };
       if (ex) return prev.map(i => i.plat_id === d.id ? entry : i);
@@ -92,7 +92,7 @@ export default function Menu() {
 
       <div style={{
         minHeight: '100vh', background: T.bg, fontFamily: font,
-        paddingBottom: 80, // espace pour nav bottom fixe
+        paddingBottom: 80,
       }}>
         {/* Alerte allergies */}
         {userAllergies.length > 0 && (
@@ -130,7 +130,7 @@ export default function Menu() {
           </div>
         </div>
 
-        {/* Catégories — pleine largeur avec scroll horizontal */}
+        {/* Catégories */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${categories.length + 1}, 1fr)`,
@@ -208,8 +208,12 @@ export default function Menu() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
                     }}>
                       {dish.image_url
-                        ? <img src={`http://localhost:3001${dish.image_url}`} alt={dish.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ? <img
+                            src={dish.image_url}  
+                            alt={dish.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={e => { e.target.style.display = 'none'; }}
+                          />
                         : <span style={{ fontSize: 46 }}>{dish.category_icon || '🍽️'}</span>
                       }
                       {dish.is_featured && (

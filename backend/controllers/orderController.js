@@ -57,8 +57,6 @@ exports.getOrders = async (req, res) => {
 };
 
 // -- PATCH /api/orders/:id/status ------------------------------
-// Cycle : RECUE -> EN_PREPARATION -> PRETE -> SERVIE -> CLOTUREE
-// C'est ici que tout se passe — le socket ne fait QUE diffuser, pas mettre à jour la BDD
 exports.updateOrderStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -74,13 +72,11 @@ exports.updateOrderStatus = async (req, res) => {
 
     await pool.execute('UPDATE commandes SET status = ?, updated_at = NOW() WHERE id = ?', [status, id]);
 
-    // Diffusion Socket.io — BDD déjà mise à jour ci-dessus
     if (req.io) {
       req.io.to('cuisine').emit('order_status_update', { orderId: id, status });
       req.io.to('salle').emit('order_status_update', { orderId: id, status });
       req.io.to(`order:${id}`).emit('order_status_update', { orderId: id, status });
 
-      // Notification dédiée au serveur quand un plat est prêt à être récupéré
       if (status === 'PRETE') {
         req.io.to('salle').emit('order_ready', { orderId: id });
       }
@@ -124,12 +120,27 @@ exports.getOrderById = async (req, res) => {
 // -- POST /api/orders ------------------------------------------
 exports.createOrder = async (req, res) => {
   const { table_id, notes, items } = req.body;
-  if (table_id === undefined || table_id === null || table_id === '' || !items?.length) {
+  if (!table_id || !items?.length) {
     return res.status(400).json({ message: 'table_id et items sont requis' });
   }
 
   try {
-    const total = items.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
+    // ✅ Récupérer les vrais prix depuis la BD
+    const platIds = items.map(i => i.plat_id);
+    const [plats] = await pool.query(
+      `SELECT id, price FROM plats WHERE id IN (?)`, [platIds]
+    );
+    const priceMap = {};
+    plats.forEach(p => { priceMap[p.id] = Number(p.price); });
+
+    // ✅ Calculer le total avec les prix BD
+    let total = 0;
+    const itemsAvecPrix = items.map(i => {
+      const unitPrice = priceMap[i.plat_id];
+      const itemTotal = unitPrice * Number(i.quantity);
+      total += itemTotal;
+      return { ...i, unit_price: unitPrice, item_total: itemTotal };
+    });
 
     const [result] = await pool.execute(
       `INSERT INTO commandes (user_id, table_id, notes, subtotal, total_amount, order_number, status, payment_status, opened_at)
@@ -138,19 +149,17 @@ exports.createOrder = async (req, res) => {
     );
     const commandeId = result.insertId;
 
-    for (const item of items) {
+    for (const item of itemsAvecPrix) {
       await pool.execute(
         'INSERT INTO order_items (commande_id, plat_id, quantity, unit_price, item_total) VALUES (?, ?, ?, ?, ?)',
-        [commandeId, item.plat_id, item.quantity, item.unit_price, Number(item.unit_price) * Number(item.quantity)]
+        [commandeId, item.plat_id, item.quantity, item.unit_price, item.item_total]
       );
     }
 
     const orderNumber = `KP-${String(commandeId).padStart(4, '0')}`;
     await pool.execute('UPDATE commandes SET order_number = ? WHERE id = ?', [orderNumber, commandeId]);
 
-    // -- Etape 3 : payload enrichi pour la cuisine --
-    // On récupère tout ce dont la cuisine a besoin en une seule requête
-    // pour éviter un second appel API côté frontend
+    // Payload enrichi pour la cuisine via Socket.io
     if (req.io) {
       const [tableRows] = await pool.execute(
         'SELECT table_number FROM tables_restaurant WHERE id = ?',
@@ -189,7 +198,6 @@ exports.deleteOrder = async (req, res) => {
   try {
     await pool.execute("UPDATE commandes SET status = 'ANNULEE' WHERE id = ?", [req.params.id]);
 
-    // Notifier cuisine et salle de l'annulation
     if (req.io) {
       req.io.to('cuisine').emit('order_status_update', { orderId: req.params.id, status: 'ANNULEE' });
       req.io.to('salle').emit('order_status_update',   { orderId: req.params.id, status: 'ANNULEE' });

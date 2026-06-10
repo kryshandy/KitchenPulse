@@ -5,7 +5,6 @@
  */
 import { useEffect, useState } from 'react';
 
-// ─── Icônes SVG des rôles (aucun emoji) ─────────────────────────────────────
 const RoleIcons = {
   client: (
     <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="42" height="42">
@@ -48,45 +47,33 @@ const ROLES_DATA = [
   { key: 'admin',     label: 'Admin',     desc: 'Tableau de bord'   },
 ];
 
-// ─── Palette ─────────────────────────────────────────────────────────────────
 const C = {
-  bg:      '#0B0C0F',
-  accent:  '#E8601C',
-  text:    '#F2EFE9',
-  muted:   '#7C7E8A',
-  card:    'rgba(255,255,255,0.04)',
-  border:  'rgba(255,255,255,0.08)',
+  bg:     '#0B0C0F',
+  accent: '#E8601C',
+  text:   '#F2EFE9',
+  muted:  '#7C7E8A',
+  card:   'rgba(255,255,255,0.04)',
+  border: 'rgba(255,255,255,0.08)',
 };
 
-// ─── Logo SVG KitchenPulse ────────────────────────────────────────────────────
 function LogoIcon({ size = 64, color = C.accent }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Assiette */}
       <circle cx="32" cy="34" r="20" stroke={color} strokeWidth="2.5"/>
       <circle cx="32" cy="34" r="13" stroke={color} strokeWidth="1.5" strokeDasharray="2 3"/>
-      {/* Couverts */}
       <path d="M20 14v8M20 22c0 3 2 4 2 7v9" stroke={color} strokeWidth="2" strokeLinecap="round"/>
       <path d="M17 14h6v5a3 3 0 0 1-6 0V14z" stroke={color} strokeWidth="1.5" strokeLinejoin="round"/>
       <path d="M44 14v24" stroke={color} strokeWidth="2" strokeLinecap="round"/>
       <path d="M41 14c0 5 6 5 6 10s-6 5-6 10v8" stroke={color} strokeWidth="1.5" strokeLinecap="round"/>
-      {/* Pulse / onde */}
       <path d="M24 34h3l2-5 4 10 2-5h3" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-// ─── Composant principal ──────────────────────────────────────────────────────
 export default function SplashScreen({ onDone }) {
   const [phase, setPhase] = useState(0);
-  // 0 = fondu logo
-  // 1 = écriture titre
-  // 2 = tagline
-  // 3 = rôles SVG
-  // 4 = bouton / fin
-
-  const BRAND   = 'KitchenPulse';
-  const [chars, setChars] = useState(0); // lettres révélées
+  const BRAND = 'KitchenPulse';
+  const [chars, setChars] = useState(0);
 
   useEffect(() => {
     const timers = [];
@@ -94,11 +81,10 @@ export default function SplashScreen({ onDone }) {
     timers.push(setTimeout(() => setPhase(2), 2400));  // tagline
     timers.push(setTimeout(() => setPhase(3), 3200));  // rôles
     timers.push(setTimeout(() => setPhase(4), 4400));  // bouton
-    timers.push(setTimeout(() => onDone?.(), 6500));   // auto-avance
+    // ✅ Pas d'auto-avance — l'utilisateur doit cliquer sur "Commencer"
     return () => timers.forEach(clearTimeout);
-  }, [onDone]);
+  }, []); // ✅ [] au lieu de [onDone] — évite toute re-exécution
 
-  // Animation lettre par lettre
   useEffect(() => {
     if (phase < 1) return;
     if (chars >= BRAND.length) return;
@@ -107,7 +93,7 @@ export default function SplashScreen({ onDone }) {
   }, [phase, chars]);
 
   const visibleBrand = BRAND.slice(0, chars);
-  const splitAt = 7; // "Kitchen" / "Pulse"
+  const splitAt = 7;
 
   return (
     <div style={{
@@ -145,10 +131,6 @@ export default function SplashScreen({ onDone }) {
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes kp-scan {
-          0%   { background-position: 0 0; }
-          100% { background-position: 0 100%; }
-        }
 
         .kp-logo-wrap {
           animation: kp-fadein .7s cubic-bezier(.22,1,.36,1) both, kp-glow 3s 1s ease-in-out infinite;
@@ -177,7 +159,7 @@ export default function SplashScreen({ onDone }) {
         backgroundSize: '200px 200px',
       }} />
 
-      {/* Radial glow background */}
+      {/* Radial glow */}
       <div style={{
         position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)',
         width: 500, height: 500, borderRadius: '50%',
@@ -185,22 +167,18 @@ export default function SplashScreen({ onDone }) {
         pointerEvents: 'none',
       }} />
 
-      {/* ── Logo ── */}
+      {/* Logo */}
       <div className="kp-logo-wrap" style={{ marginBottom: 28 }}>
         <LogoIcon size={76} />
       </div>
 
-      {/* ── Titre animé ── */}
+      {/* Titre animé lettre par lettre */}
       <h1 style={{
         fontFamily: "'Bricolage Grotesque', Georgia, serif",
         fontSize: 'clamp(32px, 6vw, 52px)',
-        fontWeight: 800,
-        color: C.text,
-        letterSpacing: '-1px',
-        margin: 0,
-        minHeight: '1.2em',
-        lineHeight: 1,
-        userSelect: 'none',
+        fontWeight: 800, color: C.text,
+        letterSpacing: '-1px', margin: 0,
+        minHeight: '1.2em', lineHeight: 1, userSelect: 'none',
       }}>
         {visibleBrand.slice(0, Math.min(chars, splitAt))}
         <span style={{ color: C.accent }}>
@@ -215,18 +193,17 @@ export default function SplashScreen({ onDone }) {
         )}
       </h1>
 
-      {/* ── Tagline ── */}
+      {/* Tagline */}
       {phase >= 2 && (
         <p className="kp-tagline" style={{
           color: C.muted, fontSize: 15, fontWeight: 400,
-          marginTop: 12, marginBottom: 0, letterSpacing: 0.3,
-          textAlign: 'center',
+          marginTop: 12, marginBottom: 0, letterSpacing: 0.3, textAlign: 'center',
         }}>
           Application de gestion d'un restaurant en temps réel
         </p>
       )}
 
-      {/* ── Rôles SVG ── */}
+      {/* Rôles SVG */}
       {phase >= 3 && (
         <div style={{
           display: 'flex', gap: 16, marginTop: 48,
@@ -234,66 +211,42 @@ export default function SplashScreen({ onDone }) {
           maxWidth: 560, padding: '0 20px',
         }}>
           {ROLES_DATA.map((role, i) => (
-            <div
-              key={role.key}
-              className="kp-role-card"
-              style={{
-                animationDelay: `${i * 0.1}s`,
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                gap: 10, padding: '18px 20px',
-                background: C.card,
-                border: `1px solid ${C.border}`,
-                borderRadius: 16,
-                width: 110,
-                color: C.muted,
-                transition: 'color .2s, border-color .2s',
-              }}
-            >
+            <div key={role.key} className="kp-role-card" style={{
+              animationDelay: `${i * 0.1}s`,
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              gap: 10, padding: '18px 20px',
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: 16, width: 110, color: C.muted,
+            }}>
               <div style={{ color: C.accent, opacity: 0.85 }}>
                 {RoleIcons[role.key]}
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: C.text, fontSize: 13, fontWeight: 700, marginBottom: 2 }}>
-                  {role.label}
-                </div>
-                <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.35 }}>
-                  {role.desc}
-                </div>
+                <div style={{ color: C.text, fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{role.label}</div>
+                <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.35 }}>{role.desc}</div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── Bouton Commencer ── */}
+      {/* Bouton Commencer — seul déclencheur vers Login */}
       {phase >= 4 && (
-        <button
-          className="kp-btn"
-          onClick={() => onDone?.()}
-          style={{
-            marginTop: 44,
-            padding: '14px 40px',
-            background: C.accent,
-            border: 'none',
-            borderRadius: 50,
-            color: '#fff',
-            fontSize: 15,
-            fontWeight: 700,
-            fontFamily: "'Outfit', sans-serif",
-            letterSpacing: 0.3,
-            animationDelay: '0s',
-          }}
-        >
+        <button className="kp-btn" onClick={() => onDone?.()} style={{
+          marginTop: 44, padding: '14px 40px',
+          background: C.accent, border: 'none', borderRadius: 50,
+          color: '#fff', fontSize: 15, fontWeight: 700,
+          fontFamily: "'Outfit', sans-serif", letterSpacing: 0.3,
+        }}>
           Commencer
         </button>
       )}
 
-      {/* ── Mention bas de page ── */}
+      {/* Mention bas de page */}
       <p style={{
         position: 'absolute', bottom: 20,
         color: C.muted, fontSize: 11, opacity: .5,
-        fontFamily: "'Outfit', sans-serif",
-        letterSpacing: 0.5,
+        fontFamily: "'Outfit', sans-serif", letterSpacing: 0.5,
       }}>
         KitchenPulse · KEYCE Informatique · Groupe 8
       </p>

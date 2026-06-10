@@ -1,38 +1,32 @@
 const express = require('express');
 const router  = express.Router();
-const pool    = require('../config/db');
 const auth    = require('../middleware/verifyToken');
 const role    = require('../middleware/verifyRole');
+const {
+  getAllUsers,
+  getPendingUsers,
+  approveUser,
+  rejectUser,
+  updateUserRole,
+  toggleUserActive,
+} = require('../controllers/userConntrollers');
 
-// ── GET /api/users — liste complète (admin) ────────────────────
-router.get('/', auth, role('admin'), async (_req, res) => {
-  try {
-    const [rows] = await pool.query(
-      `SELECT id, first_name, last_name, email, phone, role, is_active, created_at
-       FROM users
-       ORDER BY created_at DESC`
-    );
-    res.json(rows);
-  } catch {
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
+// GET  /api/users          — liste tous les utilisateurs (admin)
+router.get('/',                  auth, role('admin'), getAllUsers);
 
-// ── PUT /api/users/:id — modifier rôle / statut (admin) ────────
-router.put('/:id', auth, role('admin'), async (req, res) => {
-  const { role: newRole, is_active } = req.body;
-  try {
-    await pool.query(
-      `UPDATE users
-       SET role      = COALESCE(?, role),
-           is_active = COALESCE(?, is_active)
-       WHERE id = ?`,
-      [newRole ?? null, is_active ?? null, req.params.id]
-    );
-    res.json({ message: 'Utilisateur mis à jour' });
-  } catch {
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
+// GET  /api/users/pending  — comptes en attente de validation (admin)
+router.get('/pending',           auth, role('admin'), getPendingUsers);
+
+// PATCH /api/users/:id/approve — valider un compte serveur/cuisinier (admin)
+router.patch('/:id/approve',     auth, role('admin'), approveUser);
+
+// PATCH /api/users/:id/reject  — refuser un compte serveur/cuisinier (admin)
+router.patch('/:id/reject',      auth, role('admin'), rejectUser);
+
+// PATCH /api/users/:id/toggle  — activer/désactiver un compte (admin)
+router.patch('/:id/toggle',      auth, role('admin'), toggleUserActive);
+
+// PUT  /api/users/:id      — modifier le rôle d'un utilisateur (admin)
+router.put('/:id',               auth, role('admin'), updateUserRole);
 
 module.exports = router;

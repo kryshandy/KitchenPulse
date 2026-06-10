@@ -1,13 +1,33 @@
 // backend/controllers/dishController.js
 const pool = require('../config/db');
 
-// ── Slug automatique ──────────────────────────────────────────
+// ✅ FIX RÉSEAU : préfixe absolu pour les images
+// Toutes les machines du réseau verront les images correctement
+const SERVER_BASE_URL = process.env.SERVER_BASE_URL || 'http://10.247.191.245:3001';
+
+// Helper : transformer image_url relative en URL absolue
+const absoluteImg = (image_url) => {
+  if (!image_url) return null;
+  // Si déjà absolue (http:// ou https://), ne pas toucher
+  if (image_url.startsWith('http')) return image_url;
+  return `${SERVER_BASE_URL}${image_url}`;
+};
+
+// Helper : appliquer absoluteImg sur un plat ou un tableau de plats
+const withAbsoluteImg = (data) => {
+  if (Array.isArray(data)) {
+    return data.map(d => ({ ...d, image_url: absoluteImg(d.image_url) }));
+  }
+  return { ...data, image_url: absoluteImg(data.image_url) };
+};
+
+// ── Slug automatique ──────────────────────────────────────────────────────────
 const toSlug = (name) =>
   name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     + '-' + Date.now();
 
-// ── Helper : charger allergènes pour une liste de plats ───────
+// ── Helper : charger allergènes pour une liste de plats ──────────────────────
 const loadAllergens = async (dishes) => {
   if (!dishes.length) return;
   const ids = dishes.map(d => d.id);
@@ -25,7 +45,7 @@ const loadAllergens = async (dishes) => {
   dishes.forEach(d => { d.allergens = map[d.id] || []; });
 };
 
-// ── Helper : filtre période SQL ───────────────────────────────
+// ── Helper : filtre période SQL ───────────────────────────────────────────────
 const periodFilter = (period, col = 'c.opened_at') => {
   switch (period) {
     case 'today':  return `AND DATE(${col}) = CURDATE()`;
@@ -35,9 +55,9 @@ const periodFilter = (period, col = 'c.opened_at') => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // GET /api/dishes  (?disponible=all|true|false  &category=  &search=)
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const getAllDishes = async (req, res) => {
   const { category, search, disponible } = req.query;
 
@@ -51,14 +71,13 @@ const getAllDishes = async (req, res) => {
   `;
   const params = [];
 
-  // ✅ Fix disponible=all : ne pas filtrer sur is_active
   if (disponible === 'all') {
     // Aucun filtre is_active — retourne tout (actif + masqué) pour le cuisinier
   } else if (disponible !== undefined) {
     sql += ' AND p.is_active = ?';
     params.push(disponible === 'true' ? 1 : 0);
   } else {
-    sql += ' AND p.is_active = 1'; // Par défaut : actifs seulement (menu client)
+    sql += ' AND p.is_active = 1';
   }
 
   if (category) { sql += ' AND c.slug = ?';    params.push(category); }
@@ -68,16 +87,17 @@ const getAllDishes = async (req, res) => {
   try {
     const [dishes] = await pool.query(sql, params);
     await loadAllergens(dishes);
-    return res.json(dishes);
+    // ✅ URLs absolues pour toutes les images
+    return res.json(withAbsoluteImg(dishes));
   } catch (err) {
     console.error('getAllDishes:', err);
     return res.status(500).json({ message: 'Erreur serveur', detail: err.message });
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // GET /api/dishes/categories
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const getCategories = async (_req, res) => {
   try {
     const [cats] = await pool.query(
@@ -93,9 +113,9 @@ const getCategories = async (_req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // GET /api/dishes/:id
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const getDishById = async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -109,7 +129,8 @@ const getDishById = async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ message: 'Plat introuvable' });
 
-    const dish = rows[0];
+    // ✅ URL absolue pour l'image
+    const dish = withAbsoluteImg(rows[0]);
 
     // Allergènes
     const [allergens] = await pool.query(
@@ -148,7 +169,7 @@ const getDishById = async (req, res) => {
       );
       dish.ingredients = ings;
     } catch {
-      dish.ingredients = []; // Table plat_ingredients peut être vide
+      dish.ingredients = [];
     }
 
     return res.json(dish);
@@ -158,10 +179,10 @@ const getDishById = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // POST /api/dishes/:id/ingredients
 // Body : { ingredients: [{name, quantity, unit}] }
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const saveIngredients = async (req, res) => {
   const platId = req.params.id;
   const { ingredients } = req.body;
@@ -171,19 +192,15 @@ const saveIngredients = async (req, res) => {
   }
 
   try {
-    // Vérifier que le plat existe
     const [platRows] = await pool.query('SELECT id FROM plats WHERE id = ?', [platId]);
     if (!platRows.length) return res.status(404).json({ message: 'Plat introuvable' });
 
-    // Supprimer les anciens ingrédients
     await pool.query('DELETE FROM plat_ingredients WHERE plat_id = ?', [platId]);
 
-    // Insérer les nouveaux
     for (let i = 0; i < ingredients.length; i++) {
       const ing = ingredients[i];
       if (!ing.name?.trim()) continue;
 
-      // Trouver ou créer l'ingrédient dans la table ingredients
       let ingId;
       const [existing] = await pool.query(
         'SELECT id FROM ingredients WHERE LOWER(name) = LOWER(?)',
@@ -213,9 +230,9 @@ const saveIngredients = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
-// GET /api/dishes/my-reviews   (avis reçus sur tous les plats)
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
+// GET /api/dishes/my-reviews
+// ═════════════════════════════════════════════════════════════════════════════
 const getMyReviews = async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -235,22 +252,20 @@ const getMyReviews = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // GET /api/dishes/stats?period=today|week|month
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const getStats = async (req, res) => {
   const period = req.query.period || 'today';
   const pf = periodFilter(period);
 
   try {
-    // Commandes servies / clôturées
     const [[{ commandes_servies }]] = await pool.query(
       `SELECT COUNT(*) AS commandes_servies
        FROM commandes c
        WHERE c.status IN ('SERVIE','CLOTUREE') ${pf}`
     );
 
-    // Plats préparés (nombre total d'items dans les commandes de la période)
     const [[{ plats_prepares }]] = await pool.query(
       `SELECT COALESCE(SUM(oi.quantity), 0) AS plats_prepares
        FROM order_items oi
@@ -258,17 +273,14 @@ const getStats = async (req, res) => {
        WHERE c.status IN ('EN_PREPARATION','PRETE','SERVIE','CLOTUREE') ${pf}`
     );
 
-    // Note moyenne globale
     const [[{ note_moyenne }]] = await pool.query(
       `SELECT COALESCE(ROUND(AVG(a.note), 1), 0) AS note_moyenne FROM avis a`
     );
 
-    // Plats actifs
     const [[{ plats_actifs }]] = await pool.query(
       `SELECT COUNT(*) AS plats_actifs FROM plats WHERE is_active = 1`
     );
 
-    // Top 5 plats les plus commandés sur la période
     const [top_plats] = await pool.query(
       `SELECT p.name AS nom, SUM(oi.quantity) AS ventes
        FROM order_items oi
@@ -280,7 +292,6 @@ const getStats = async (req, res) => {
        LIMIT 5`
     );
 
-    // Notes par plat (top 5 les plus notés)
     const [notes_par_plat] = await pool.query(
       `SELECT p.name AS nom,
               ROUND(AVG(a.note), 1)  AS note_moyenne,
@@ -307,9 +318,9 @@ const getStats = async (req, res) => {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // POST /api/dishes
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const createDish = async (req, res) => {
   const { name, description, price, category_id, prep_time_minutes, is_featured, calories, proteins, lipids, glucids, fibers } = req.body;
 
@@ -317,6 +328,7 @@ const createDish = async (req, res) => {
     return res.status(400).json({ message: 'Champs obligatoires : name, price, category_id' });
   }
 
+  // ✅ Stocker le chemin RELATIF en BD (indépendant de l'IP)
   let image_url = req.body.image_url || null;
   if (req.file) image_url = `/uploads/dishes/${req.file.filename}`;
 
@@ -326,11 +338,15 @@ const createDish = async (req, res) => {
     const [result] = await pool.query(
       `INSERT INTO plats (name, slug, description, price, category_id, image_url, prep_time_minutes, is_active, is_featured)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-      [name, slug, description || '', parseFloat(price), parseInt(category_id), image_url, parseInt(prep_time_minutes) || 15, is_featured == 1 || is_featured === 'true' || is_featured === true ? 1 : 0]
+      [
+        name, slug, description || '', parseFloat(price), parseInt(category_id),
+        image_url,  // relatif en BD ✅
+        parseInt(prep_time_minutes) || 15,
+        is_featured == 1 || is_featured === 'true' || is_featured === true ? 1 : 0,
+      ]
     );
     const platId = result.insertId;
 
-    // Nutriments
     if (calories || proteins || lipids || glucids) {
       await pool.query(
         `INSERT INTO plat_nutriments (plat_id, calories, proteins, lipids, glucids, fibers) VALUES (?,?,?,?,?,?)`,
@@ -342,16 +358,17 @@ const createDish = async (req, res) => {
       `SELECT p.*, c.name AS category_name FROM plats p JOIN categories c ON p.category_id = c.id WHERE p.id = ?`,
       [platId]
     );
-    return res.status(201).json({ ...newDish[0], id: platId });
+    // ✅ URL absolue dans la réponse
+    return res.status(201).json(withAbsoluteImg({ ...newDish[0], id: platId }));
   } catch (err) {
     console.error('createDish:', err);
     return res.status(500).json({ message: 'Erreur serveur', detail: err.message });
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // PATCH /api/dishes/:id
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const updateDish = async (req, res) => {
   const { id } = req.params;
   const { name, description, price, category_id, prep_time_minutes, is_active, is_featured, calories, proteins, lipids, glucids, fibers } = req.body;
@@ -361,11 +378,11 @@ const updateDish = async (req, res) => {
     if (!existing.length) return res.status(404).json({ message: 'Plat introuvable' });
     const d = existing[0];
 
+    // ✅ Garder le chemin relatif en BD
     let image_url = d.image_url;
     if (req.file) image_url = `/uploads/dishes/${req.file.filename}`;
     else if (req.body.image_url !== undefined) image_url = req.body.image_url;
 
-    // Normaliser is_active (peut arriver en string "0"/"1" depuis FormData ou JSON)
     const newIsActive   = is_active   !== undefined ? (Number(is_active)   > 0 ? 1 : 0) : d.is_active;
     const newIsFeatured = is_featured !== undefined ? (Number(is_featured) > 0 ? 1 : 0) : d.is_featured;
 
@@ -378,7 +395,7 @@ const updateDish = async (req, res) => {
         description !== undefined ? description       : d.description,
         price       !== undefined ? parseFloat(price) : d.price,
         category_id !== undefined ? parseInt(category_id) : d.category_id,
-        image_url,
+        image_url,  // relatif en BD ✅
         prep_time_minutes !== undefined ? parseInt(prep_time_minutes) : d.prep_time_minutes,
         newIsActive,
         newIsFeatured,
@@ -386,7 +403,6 @@ const updateDish = async (req, res) => {
       ]
     );
 
-    // Nutriments
     if (calories !== undefined || proteins !== undefined) {
       const [nutri] = await pool.query('SELECT id FROM plat_nutriments WHERE plat_id = ?', [id]);
       if (nutri.length) {
@@ -406,16 +422,17 @@ const updateDish = async (req, res) => {
       `SELECT p.*, c.name AS category_name FROM plats p JOIN categories c ON p.category_id = c.id WHERE p.id = ?`,
       [id]
     );
-    return res.json(updated[0]);
+    // ✅ URL absolue dans la réponse
+    return res.json(withAbsoluteImg(updated[0]));
   } catch (err) {
     console.error('updateDish:', err);
     return res.status(500).json({ message: 'Erreur serveur', detail: err.message });
   }
 };
 
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 // DELETE /api/dishes/:id
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
 const deleteDish = async (req, res) => {
   try {
     const [existing] = await pool.query('SELECT id FROM plats WHERE id = ?', [req.params.id]);

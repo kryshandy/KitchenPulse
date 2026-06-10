@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://10.247.191.245:3001/api',   // proxy Vite → http://localhost:3001/api
+  baseURL: '/api',   // ← relatif : passe par le proxy Vite ✓
   timeout: 10_000,
 });
 

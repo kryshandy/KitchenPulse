@@ -19,7 +19,7 @@ export const light = {
 const ThemeContext = createContext(null);
 
 export const ThemeProvider = ({ children }) => {
-  const [isDark, setIsDark] = useState(() => localStorage.getItem('kp_theme') !== 'light');
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('kp_theme') === 'dark');
   const T = isDark ? dark : light;
 
   useEffect(() => { localStorage.setItem('kp_theme', isDark ? 'dark' : 'light'); }, [isDark]);
